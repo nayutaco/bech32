@@ -8,11 +8,17 @@
 #include "segwit_addr.c"
 
 static int get_hrp_type(const char *hrp) {
-    if ((hrp[0] == 'b') && (hrp[1] == 'c')) {
+    if (strcmp(hrp, "bc") == 0) {
         return SEGWIT_ADDR_MAINNET;
     }
-    if ((hrp[0] == 't') && (hrp[1] == 'b')) {
+    if (strcmp(hrp, "tb") == 0) {
         return SEGWIT_ADDR_TESTNET;
+    }
+    if (strcmp(hrp, "lnbc") == 0) {
+        return LN_ADDR_MAINNET;
+    }
+    if (strcmp(hrp, "lntb") == 0) {
+        return LN_ADDR_TESTNET;
     }
     printf("hrp=%s\n", hrp);
     assert(0);
@@ -99,6 +105,10 @@ static struct valid_address_data valid_address[] = {
             0xe9, 0x1c, 0x6c, 0xe2, 0x4d, 0x16, 0x5d, 0xab, 0x93, 0xe8, 0x64,
             0x33
         }
+    },
+    {
+        "lnbc1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq8rkx3yf5tcsyz3d73gafnh3cax9rn449d9p5uxz9ezhhypd0elx87sjle52x86fux2ypatgddc6k63n7erqz25le42c4u4ecky03ylcqca784w",
+        0, {}
     }
 };
 
@@ -196,6 +206,14 @@ int main(void) {
         if (!ret) {
             hrp = "tb";
             ret = segwit_addr_decode(&witver, witprog, &witprog_len, get_hrp_type(hrp), valid_address[i].address);
+        }
+        if (!ret) {
+            hrp = "lnbc";
+            ret = ln_addr_decode(&witver, witprog, &witprog_len, get_hrp_type(hrp), valid_address[i].address);
+        }
+        if (!ret) {
+            hrp = "lntb";
+            ret = ln_addr_decode(&witver, witprog, &witprog_len, get_hrp_type(hrp), valid_address[i].address);
         }
         if (!ret) {
             printf("segwit_addr_decode fails: '%s'\n", valid_address[i].address);
