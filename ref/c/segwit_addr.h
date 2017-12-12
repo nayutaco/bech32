@@ -27,8 +27,8 @@
 
 #define SEGWIT_ADDR_MAINNET     ((uint8_t)0)
 #define SEGWIT_ADDR_TESTNET     ((uint8_t)1)
-#define LN_ADDR_MAINNET         ((uint8_t)2)
-#define LN_ADDR_TESTNET         ((uint8_t)3)
+#define LN_INVOICE_MAINNET      ((uint8_t)2)
+#define LN_INVOICE_TESTNET      ((uint8_t)3)
 
 #ifdef __cplusplus
 extern "C" {

@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
+#include <inttypes.h>
 
 #include "segwit_addr.h"
 
@@ -104,15 +106,21 @@ static bool bech32_encode(char *output, const char *hrp, uint32_t hrp_chk, const
  *  In: input:     Pointer to a null-terminated Bech32 string.
  *  Returns true if succesful.
  */
-static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char *input) {
+static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char *input, bool ln) {
     uint32_t chk = 1;
     size_t i;
     size_t input_len = strlen(input);
     size_t hrp_len;
     int have_lower = 0, have_upper = 0;
-    // if (input_len < 8 || input_len > 90) {
-    //     return false;
-    // }
+    if (ln) {
+        if (input_len < (4 + 1 + 7 + 104 + 6)) {
+            return false;
+        }
+    } else {
+        if ((input_len < 8) || (90 < input_len)) {
+            return false;
+        }
+    }
     *data_len = 0;
     while (*data_len < input_len && input[(input_len - 1) - *data_len] != '1') {
         ++(*data_len);
@@ -161,7 +169,7 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
     return chk == 1;
 }
 
-static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, int pad) {
+static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, bool pad) {
     uint32_t val = 0;
     int bits = 0;
     uint32_t maxv = (((uint32_t)1) << outbits) - 1;
@@ -191,7 +199,7 @@ bool segwit_addr_encode(char *output, uint8_t hrp_type, int witver, const uint8_
     if (witprog_len < 2 || witprog_len > 40) return false;
     if ((hrp_type != SEGWIT_ADDR_MAINNET) && (hrp_type != SEGWIT_ADDR_TESTNET)) return false;
     data[0] = witver;
-    if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, 1)) return false;
+    if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, true)) return false;
     ++datalen;
     return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
 }
@@ -201,44 +209,129 @@ bool segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint
     char hrp_actual[84];
     size_t data_len;
     if ((hrp_type != SEGWIT_ADDR_MAINNET) && (hrp_type != SEGWIT_ADDR_TESTNET)) return false;
-    if (!bech32_decode(hrp_actual, data, &data_len, addr)) return false;
+    if (!bech32_decode(hrp_actual, data, &data_len, addr, false)) return false;
     if (data_len == 0 || data_len > 65) return false;
     if (strncmp(hrp_str[hrp_type], hrp_actual, 2) != 0) return false;
     if (data[0] > 16) return false;
     *witdata_len = 0;
-    if (!convert_bits(witdata, witdata_len, 8, data + 1, data_len - 1, 5, 0)) return false;
+    if (!convert_bits(witdata, witdata_len, 8, data + 1, data_len - 1, 5, false)) return false;
     if (*witdata_len < 2 || *witdata_len > 40) return false;
     if (data[0] == 0 && *witdata_len != 20 && *witdata_len != 32) return false;
     *witver = data[0];
     return true;
 }
 
-bool ln_addr_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len) {
+bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len) {
     uint8_t data[65];
     size_t datalen = 0;
     if (witver > 16) return false;
     if (witver == 0 && witprog_len != 20 && witprog_len != 32) return false;
     if (witprog_len < 2 || witprog_len > 40) return false;
-    if ((hrp_type != LN_ADDR_MAINNET) && (hrp_type != LN_ADDR_TESTNET)) return false;
+    if ((hrp_type != LN_INVOICE_MAINNET) && (hrp_type != LN_INVOICE_TESTNET)) return false;
     data[0] = witver;
-    if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, 1)) return false;
+    if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, true)) return false;
     ++datalen;
     return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
 }
 
-bool ln_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint8_t hrp_type, const char* addr) {
-    uint8_t data[84];
+bool ln_invoice_decode(uint8_t* ivcdata, size_t* ivcdata_len, uint8_t hrp_type, const char* invoice) {
+    uint8_t data[584];
     char hrp_actual[84];
     size_t data_len;
-    if ((hrp_type != LN_ADDR_MAINNET) && (hrp_type != LN_ADDR_TESTNET)) return false;
-    if (!bech32_decode(hrp_actual, data, &data_len, addr)) return false;
-    if (data_len == 0 || data_len > 65) return false;
-    if (strncmp(hrp_str[hrp_type], hrp_actual, 2) != 0) return false;
-    if (data[0] > 16) return false;
-    *witdata_len = 0;
-    if (!convert_bits(witdata, witdata_len, 8, data + 1, data_len - 1, 5, 0)) return false;
-    if (*witdata_len < 2 || *witdata_len > 40) return false;
-    if (data[0] == 0 && *witdata_len != 20 && *witdata_len != 32) return false;
-    *witver = data[0];
+    if ((hrp_type != LN_INVOICE_MAINNET) && (hrp_type != LN_INVOICE_TESTNET)) return false;
+    if (!bech32_decode(hrp_actual, data, &data_len, invoice, true)) return false;
+    if (strcmp(hrp_str[hrp_type], hrp_actual) != 0) return false;
+
+    /*
+     * +-------------------+
+     * | "lnbc" or "lntb"  |
+     * | (amount)          |
+     * +-------------------+
+     * | timestamp         |
+     * | tagged field      |
+     * | signature         |
+     * | checksum          |
+     * +-------------------+
+     */
+    const uint8_t *p_tag = data + 7;
+    const uint8_t *p_sig = data + data_len - 104;
+
+    //signature(104 chars)
+    uint8_t sig[65];
+    size_t sig_len = 0;
+    if (!convert_bits(sig, &sig_len, 8, p_sig, 104, 5, false)) return false;
+printf("sig_len=%d\n", (int)sig_len);
+for (int lp = 0; lp < 64; lp++) {
+    printf("%02x", sig[lp]);
+}
+printf("\n\n");
+
+    //timestamp(7 chars)
+    uint8_t timestamp[sizeof(uint64_t)];
+    size_t timestamp_len = 0;
+    if (!convert_bits(timestamp, &timestamp_len, 8, data, 7, 5, true)) return false;
+    uint64_t ts = 0;
+    for (int lp = 0; lp < timestamp_len; lp++) {
+        ts <<= 8;
+        ts |= (uint64_t)timestamp[lp];
+    }
+    ts >>= 5;
+    printf("timestamp= %" PRIu64 "\n",ts);
+
+    //tagged field
+    printf("data_len=%d\n", (int)data_len);
+    while (p_tag < p_sig) {
+        uint8_t tag = *p_tag;
+        switch (tag) {
+        case 1:
+            printf("payment_hash\n");
+            break;
+        case 13:
+            printf("purpose of payment(ASCII)\n");
+            break;
+        case 19:
+            printf("pubkey of payee node\n");
+            break;
+        case 23:
+            printf("purpose of payment(SHA256)\n");
+            break;
+        case 6:
+            printf("expiry second\n");
+            break;
+        case 24:
+            printf("min_final_cltv_expiry\n");
+            break;
+        case 9:
+            printf("depending on version\n");
+            break;
+        case 3:
+            printf("private info\n");
+            break;
+        default:
+            printf("unknown tag: %02x\n", *p_tag);
+            break;
+        }
+        int len = p_tag[1] * 0x20 + p_tag[2];
+        printf("  len=%d\n", len);
+        p_tag += 3;
+        uint8_t *p_data = (uint8_t *)malloc((len * 5 + 7) / 8); //確保サイズは切り上げ
+        size_t d_len = 0;
+        if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, false)) return false;
+        //printf("malloc=%d, d_len=%d\n", (len * 5 + 7) / 8, d_len);
+        for (int lp = 0; lp < d_len; lp++) {  //処理サイズは切り捨て
+            printf("%02x", p_data[lp]);
+        }
+        if (tag == 13) {
+            printf("\n");
+            for (int lp = 0; lp < d_len; lp++) {
+                printf("%c", p_data[lp]);
+            }
+        }
+        printf("\n\n");
+        free(p_data);
+
+        p_tag += len;
+    }
+
     return true;
 }
