@@ -34,8 +34,19 @@ uint32_t bech32_polymod_step(uint32_t pre) {
         (-((b >> 4) & 1) & 0x2a1462b3UL);
 }
 
-static const char* charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-
+static const char charset[] = {
+    'q', 'p', 'z', 'r', 'y', '9', 'x', '8',
+    'g', 'f', '2', 't', 'v', 'd', 'w', '0',
+    's', '3', 'j', 'n', '5', '4', 'k', 'h',
+    'c', 'e', '6', 'm', 'u', 'a', '7', 'l'
+};
+static const char hrp_str[2][2] = {
+    { 'b', 'c' },
+    { 't', 'b' }
+};
+static const uint32_t k_chk[2] = {
+    0x2318043, 0x2318282
+};
 static const int8_t charset_rev[128] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -47,28 +58,24 @@ static const int8_t charset_rev[128] = {
      1,  0,  3, 16, 11, 28, 12, 14,  6,  4,  2, -1, -1, -1, -1, -1
 };
 
-int bech32_encode(char *output, const char *hrp, const uint8_t *data, size_t data_len) {
-    uint32_t chk = 1;
-    size_t i = 0;
-    while (hrp[i] != 0) {
-        int ch = hrp[i];
-        if (ch < 33 || ch > 126) {
-            return 0;
-        }
-
-        if (ch >= 'A' && ch <= 'Z') return 0;
-        chk = bech32_polymod_step(chk) ^ (ch >> 5);
-        ++i;
-    }
-    if (i + 7 + data_len > 90) return 0;
-    chk = bech32_polymod_step(chk);
-    while (*hrp != 0) {
-        chk = bech32_polymod_step(chk) ^ (*hrp & 0x1f);
-        *(output++) = *(hrp++);
-    }
+/** Encode a Bech32 string
+ *
+ *  Out: output:  Pointer to a buffer of size strlen(hrp) + data_len + 8 that
+ *                will be updated to contain the null-terminated Bech32 string.
+ *  In: hrp :     Pointer to the non-null-terminated human readable part(length=2).
+ *      hrp_chk:  pre-calculated chk
+ *      data :    Pointer to an array of 5-bit values.
+ *      data_len: Length of the data array.
+ *  Returns true if successful.
+ */
+static bool bech32_encode(char *output, const char *hrp, uint32_t hrp_chk, const uint8_t *data, size_t data_len) {
+    uint32_t chk = hrp_chk;
+    size_t i;
+    *(output++) = hrp[0];
+    *(output++) = hrp[1];
     *(output++) = '1';
     for (i = 0; i < data_len; ++i) {
-        if (*data >> 5) return 0;
+        if (*data >> 5) return false;
         chk = bech32_polymod_step(chk) ^ (*data);
         *(output++) = charset[*(data++)];
     }
@@ -80,17 +87,28 @@ int bech32_encode(char *output, const char *hrp, const uint8_t *data, size_t dat
         *(output++) = charset[(chk >> ((5 - i) * 5)) & 0x1f];
     }
     *output = 0;
-    return 1;
+    return true;
 }
 
-int bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char *input) {
+/** Decode a Bech32 string
+ *
+ *  Out: hrp:      Pointer to a buffer of size strlen(input) - 6. Will be
+ *                 updated to contain the null-terminated human readable part.
+ *       data:     Pointer to a buffer of size strlen(input) - 8 that will
+ *                 hold the encoded 5-bit data values.
+ *       data_len: Pointer to a size_t that will be updated to be the number
+ *                 of entries in data.
+ *  In: input:     Pointer to a null-terminated Bech32 string.
+ *  Returns true if succesful.
+ */
+static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char *input) {
     uint32_t chk = 1;
     size_t i;
     size_t input_len = strlen(input);
     size_t hrp_len;
     int have_lower = 0, have_upper = 0;
     if (input_len < 8 || input_len > 90) {
-        return 0;
+        return false;
     }
     *data_len = 0;
     while (*data_len < input_len && input[(input_len - 1) - *data_len] != '1') {
@@ -98,13 +116,13 @@ int bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char *input)
     }
     hrp_len = input_len - (1 + *data_len);
     if (hrp_len < 1 || *data_len < 6) {
-        return 0;
+        return false;
     }
     *(data_len) -= 6;
     for (i = 0; i < hrp_len; ++i) {
         int ch = input[i];
         if (ch < 33 || ch > 126) {
-            return 0;
+            return false;
         }
         if (ch >= 'a' && ch <= 'z') {
             have_lower = 1;
@@ -126,7 +144,7 @@ int bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char *input)
         if (input[i] >= 'a' && input[i] <= 'z') have_lower = 1;
         if (input[i] >= 'A' && input[i] <= 'Z') have_upper = 1;
         if (v == -1) {
-            return 0;
+            return false;
         }
         chk = bech32_polymod_step(chk) ^ v;
         if (i + 6 < input_len) {
@@ -135,12 +153,12 @@ int bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char *input)
         ++i;
     }
     if (have_lower && have_upper) {
-        return 0;
+        return false;
     }
     return chk == 1;
 }
 
-static int convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, int pad) {
+static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, int pad) {
     uint32_t val = 0;
     int bits = 0;
     uint32_t maxv = (((uint32_t)1) << outbits) - 1;
@@ -157,35 +175,37 @@ static int convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t
             out[(*outlen)++] = (val << (outbits - bits)) & maxv;
         }
     } else if (((val << (outbits - bits)) & maxv) || bits >= inbits) {
-        return 0;
+        return false;
     }
-    return 1;
+    return true;
 }
 
-int segwit_addr_encode(char *output, const char *hrp, int witver, const uint8_t *witprog, size_t witprog_len) {
+bool segwit_addr_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len) {
     uint8_t data[65];
     size_t datalen = 0;
-    if (witver > 16) return 0;
-    if (witver == 0 && witprog_len != 20 && witprog_len != 32) return 0;
-    if (witprog_len < 2 || witprog_len > 40) return 0;
+    if (witver > 16) return false;
+    if (witver == 0 && witprog_len != 20 && witprog_len != 32) return false;
+    if (witprog_len < 2 || witprog_len > 40) return false;
+    if (hrp_type > SEGWIT_ADDR_TESTNET) return false;
     data[0] = witver;
-    convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, 1);
+    if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, 1)) return false;
     ++datalen;
-    return bech32_encode(output, hrp, data, datalen);
+    return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
 }
 
-int segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, const char* hrp, const char* addr) {
+bool segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint8_t hrp_type, const char* addr) {
     uint8_t data[84];
     char hrp_actual[84];
     size_t data_len;
-    if (!bech32_decode(hrp_actual, data, &data_len, addr)) return 0;
-    if (data_len == 0 || data_len > 65) return 0;
-    if (strncmp(hrp, hrp_actual, 84) != 0) return 0;
-    if (data[0] > 16) return 0;
+    if (hrp_type > SEGWIT_ADDR_TESTNET) return false;
+    if (!bech32_decode(hrp_actual, data, &data_len, addr)) return false;
+    if (data_len == 0 || data_len > 65) return false;
+    if (strncmp(hrp_str[hrp_type], hrp_actual, 2) != 0) return false;
+    if (data[0] > 16) return false;
     *witdata_len = 0;
-    if (!convert_bits(witdata, witdata_len, 8, data + 1, data_len - 1, 5, 0)) return 0;
-    if (*witdata_len < 2 || *witdata_len > 40) return 0;
-    if (data[0] == 0 && *witdata_len != 20 && *witdata_len != 32) return 0;
+    if (!convert_bits(witdata, witdata_len, 8, data + 1, data_len - 1, 5, 0)) return false;
+    if (*witdata_len < 2 || *witdata_len > 40) return false;
+    if (data[0] == 0 && *witdata_len != 20 && *witdata_len != 32) return false;
     *witver = data[0];
-    return 1;
+    return true;
 }
