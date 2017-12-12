@@ -283,6 +283,7 @@ int main(void) {
     }
 #endif
     for (i = 0; i < sizeof(ln_valid_address) / sizeof(ln_valid_address[0]); ++i) {
+        printf("=[%d]=============================\n", i);
         uint8_t invoice[256];
         size_t inv_len;
         int hrp_type = LN_INVOICE_MAINNET;

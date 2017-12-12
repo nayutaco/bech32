@@ -169,6 +169,13 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
     return chk == 1;
 }
 
+//inの先頭からinbitsずつ貯めていき、outbitsを超えるとその分をoutに代入していく
+//そのため、
+//  inbits:5
+//  in [01 0c 12 1f1c 19 02]
+//  outbits:8
+//とした場合、out[0x0b 0x25 0xfe 0x64 0x40]が出ていく。
+//最後の0x40は最下位bitの0数はinbitsと同じなため、[0x59 x92f 0xf3 0x22]として処理すべきと考えられる。
 static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, bool pad) {
     uint32_t val = 0;
     int bits = 0;
@@ -188,6 +195,90 @@ static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_
     } else if (((val << (outbits - bits)) & maxv) || bits >= inbits) {
         return false;
     }
+    return true;
+}
+
+//inbits:5, outbits:8で64bitまで変換可能
+static uint64_t convert_be64(const uint8_t *p_data, size_t dlen)
+{
+    uint64_t ret = 0;
+    for (size_t lp = 0; lp < dlen; lp++) {
+        ret <<= 5;
+        ret |= p_data[lp];
+    }
+    return ret;
+}
+
+//32進数として変換
+static uint64_t convert_32(const uint8_t *p_data, size_t dlen)
+{
+    uint64_t ret = 0;
+    for (size_t lp = 0; lp < dlen; lp++) {
+        ret *= (uint64_t)32;
+        ret += (uint64_t)p_data[lp];
+    }
+    return ret;
+}
+
+static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
+{
+    printf("------------------\n");
+    uint8_t tag = *p_tag;
+    switch (tag) {
+    case 1:
+        printf("payment_hash\n");
+        break;
+    case 13:
+        printf("purpose of payment(ASCII)\n");
+        break;
+    case 19:
+        printf("pubkey of payee node\n");
+        break;
+    case 23:
+        printf("purpose of payment(SHA256)\n");
+        break;
+    case 6:
+        printf("expiry second\n");
+        break;
+    case 24:
+        printf("min_final_cltv_expiry\n");
+        break;
+    case 9:
+        printf("Fallback on-chain\n");
+        break;
+    case 3:
+        printf("extra routing info\n");
+        break;
+    default:
+        printf("unknown tag: %02x\n", *p_tag);
+        break;
+    }
+    int len = p_tag[1] * 0x20 + p_tag[2];
+    printf("  len=%d\n", len);
+    p_tag += 3;
+    uint8_t *p_data = (uint8_t *)malloc((len * 5 + 7) / 8); //確保サイズは切り上げ
+    size_t d_len = 0;
+    //printf("malloc=%d, d_len=%d\n", (len * 5 + 7) / 8, (int)d_len);
+    if (tag == 13) {
+        if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
+        d_len =  (len * 5) / 8;
+        for (size_t lp = 0; lp < d_len; lp++) {
+            printf("%c", p_data[lp]);
+        }
+    } else if (tag == 6) {
+        uint64_t expiry = convert_32(p_tag, len);
+        printf("expiry=%" PRIu32 "\n", (uint32_t)expiry);
+    } else {
+        if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
+        d_len =  (len * 5) / 8;
+        for (size_t lp = 0; lp < d_len; lp++) {  //処理サイズは切り捨て
+            printf("%02x", p_data[lp]);
+        }
+    }
+    printf("\n\n");
+    free(p_data);
+
+    *p_len = 3 + len;
     return true;
 }
 
@@ -240,7 +331,15 @@ bool ln_invoice_decode(uint8_t* ivcdata, size_t* ivcdata_len, uint8_t hrp_type, 
     size_t data_len;
     if ((hrp_type != LN_INVOICE_MAINNET) && (hrp_type != LN_INVOICE_TESTNET)) return false;
     if (!bech32_decode(hrp_actual, data, &data_len, invoice, true)) return false;
-    if (strcmp(hrp_str[hrp_type], hrp_actual) != 0) return false;
+    if (strncmp(hrp_str[hrp_type], hrp_actual, 4) != 0) return false;
+    size_t amt_len = strlen(hrp_actual) - 4;
+    if (amt_len > 0) {
+        printf("amount= ");
+        for (size_t lp = 0; lp < amt_len; lp++) {
+            printf("%c", hrp_actual[4 + lp]);
+        }
+        printf("\n");
+    }
 
     /*
      * +-------------------+
@@ -267,71 +366,20 @@ for (int lp = 0; lp < 64; lp++) {
 printf("\n\n");
 
     //timestamp(7 chars)
-    uint8_t timestamp[sizeof(uint64_t)];
-    size_t timestamp_len = 0;
-    if (!convert_bits(timestamp, &timestamp_len, 8, data, 7, 5, true)) return false;
-    uint64_t ts = 0;
-    for (int lp = 0; lp < timestamp_len; lp++) {
-        ts <<= 8;
-        ts |= (uint64_t)timestamp[lp];
-    }
-    ts >>= 5;
+    uint64_t ts = convert_be64(data, 7);
     printf("timestamp= %" PRIu64 "\n",ts);
 
-    //tagged field
+    //tagged fields
     printf("data_len=%d\n", (int)data_len);
+    bool ret = true;
     while (p_tag < p_sig) {
-        uint8_t tag = *p_tag;
-        switch (tag) {
-        case 1:
-            printf("payment_hash\n");
-            break;
-        case 13:
-            printf("purpose of payment(ASCII)\n");
-            break;
-        case 19:
-            printf("pubkey of payee node\n");
-            break;
-        case 23:
-            printf("purpose of payment(SHA256)\n");
-            break;
-        case 6:
-            printf("expiry second\n");
-            break;
-        case 24:
-            printf("min_final_cltv_expiry\n");
-            break;
-        case 9:
-            printf("depending on version\n");
-            break;
-        case 3:
-            printf("private info\n");
-            break;
-        default:
-            printf("unknown tag: %02x\n", *p_tag);
+        size_t len;
+        ret = analyze_tag(&len, p_tag);
+        if (!ret) {
             break;
         }
-        int len = p_tag[1] * 0x20 + p_tag[2];
-        printf("  len=%d\n", len);
-        p_tag += 3;
-        uint8_t *p_data = (uint8_t *)malloc((len * 5 + 7) / 8); //確保サイズは切り上げ
-        size_t d_len = 0;
-        if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, false)) return false;
-        //printf("malloc=%d, d_len=%d\n", (len * 5 + 7) / 8, d_len);
-        for (int lp = 0; lp < d_len; lp++) {  //処理サイズは切り捨て
-            printf("%02x", p_data[lp]);
-        }
-        if (tag == 13) {
-            printf("\n");
-            for (int lp = 0; lp < d_len; lp++) {
-                printf("%c", p_data[lp]);
-            }
-        }
-        printf("\n\n");
-        free(p_data);
-
         p_tag += len;
     }
 
-    return true;
+    return ret;
 }
