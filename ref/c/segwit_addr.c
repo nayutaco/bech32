@@ -175,7 +175,8 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
 //  in [01 0c 12 1f1c 19 02]
 //  outbits:8
 //とした場合、out[0x0b 0x25 0xfe 0x64 0x40]が出ていく。
-//最後の0x40は最下位bitの0数はinbitsと同じなため、[0x59 x92f 0xf3 0x22]として処理すべきと考えられる。
+//最後の0x40は最下位bitの0数はinbitsと同じなため、[0x59 x92f 0xf3 0x22]として処理すべきと考えられるが、そうはできない。
+//その場合は、64bitまでであればconvert_be64()を使用する。
 static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, bool pad) {
     uint32_t val = 0;
     int bits = 0;
@@ -347,7 +348,7 @@ bool ln_invoice_decode(uint8_t* ivcdata, size_t* ivcdata_len, uint8_t hrp_type, 
      * | (amount)          |
      * +-------------------+
      * | timestamp         |
-     * | tagged field      |
+     * | (tagged fields)   |
      * | signature         |
      * | checksum          |
      * +-------------------+

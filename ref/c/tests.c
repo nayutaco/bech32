@@ -162,6 +162,11 @@ static struct valid_address_data ln_valid_address[] = {
         "lnbc20m1pvjluezhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqfp4qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q28j0v3rwgy9pvjnd48ee2pl8xrpxysd5g44td63g6xcjcu003j3qe8878hluqlvl3km8rm92f5stamd3jw763n3hck0ct7p8wwj463cql26ava",
         0, {}
     },
+    {
+        //starblock caffe : 035b55e3e08538afeef6ff9804e3830293eec1c4a6a9570f1e96a478dad1c86fed?
+        "lntb12u1pdrzr6vpp5twr0ftulwyfmss588xzd9u40vpqls20sktr8vkxe5sd32ekt4eqsdp2xys9xct5da3kx6twv9kk7m3qg3hkccm9ypxxzar5v5jrxr5r5h67twdreqekeqa9f45zznt666v3wed7h7lxr9qc2lw0dnglu0a8psh80ulssqgdmtqk4cpmm2zguejf30p3fr63xj5c75u4qqha7eum",
+        0, {}
+    },
 };
 
 static void segwit_scriptpubkey(uint8_t* scriptpubkey, size_t* scriptpubkeylen, int witver, const uint8_t* witprog, size_t witprog_len) {
