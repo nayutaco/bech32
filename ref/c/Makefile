@@ -137,10 +137,10 @@ clean:
 	$(RM) $(OBJECT_DIRECTORY) $(OUTPUT_BINARY_DIRECTORY)/$(OUTPUT_FILENAME) .Depend tst
 
 test:
-	@rm -f tst > /dev/null 2>&1
-	@$(NO_ECHO)$(CC) $(CFLAGS) $(INC_PATHS) -o tst tests.c
+	@$(RM) tst
+	@$(NO_ECHO)$(CC) $(CFLAGS) $(INC_PATHS) -I../../../../include -o tst tests.c -L../../../.. -L../../../install/lib -lucoin -llmdb -lsodium -lbase58 -lmbedcrypto -pthread
 	@./tst
-	@rm tst
+	@$(RM) tst
 
 ################################
 

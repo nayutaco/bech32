@@ -262,20 +262,72 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
     p_tag += 3;
     uint8_t *p_data = (uint8_t *)malloc((len * 5 + 7) / 8); //確保サイズは切り上げ
     size_t d_len = 0;
-    //printf("malloc=%d, d_len=%d\n", (len * 5 + 7) / 8, (int)d_len);
-    if (tag == 13) {
+    switch (tag) {
+    case 13:
+        //purpose of payment(ASCII)
         if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
         d_len =  (len * 5) / 8;
         for (size_t lp = 0; lp < d_len; lp++) {
             printf("%c", p_data[lp]);
         }
-    } else if (tag == 6) {
-        uint64_t expiry = convert_32(p_tag, len);
-        printf("expiry=%" PRIu32 "\n", (uint32_t)expiry);
-    } else {
+        break;
+    case 6:
+        //expiry second
+        {
+            uint64_t expiry = convert_32(p_tag, len);
+            printf("expiry=%" PRIu32 "\n", (uint32_t)expiry);
+        }
+        break;
+    case 3:
+        //extra routing info
         if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
         d_len =  (len * 5) / 8;
-        for (size_t lp = 0; lp < d_len; lp++) {  //処理サイズは切り捨て
+        if (d_len < 102) return false;
+
+        {
+            const uint8_t *p = p_data;
+
+            for (int lp2 = 0; lp2 < d_len / 51; lp2++) {
+                printf("-----------\npubkey= ");
+                for (size_t lp = 0; lp < 33; lp++) {
+                    printf("%02x", *p++);
+                }
+                printf("\n");
+
+                uint64_t short_channel_id = 0;
+                for (size_t lp = 0; lp < sizeof(uint64_t); lp++) {
+                    short_channel_id <<= 8;
+                    short_channel_id |= *p++;
+                }
+                printf("short_channel_id= %016" PRIx64 "\n", short_channel_id);
+
+                uint32_t fee_base_msat = 0;
+                for (size_t lp = 0; lp < sizeof(uint32_t); lp++) {
+                    fee_base_msat <<= 8;
+                    fee_base_msat |= *p++;
+                }
+                printf("fee_base_msat= %d\n", fee_base_msat);
+
+                uint32_t fee_proportional_millionths = 0;
+                for (size_t lp = 0; lp < sizeof(uint32_t); lp++) {
+                    fee_proportional_millionths <<= 8;
+                    fee_proportional_millionths |= *p++;
+                }
+                printf("fee_proportional_millionths= %d\n", fee_proportional_millionths);
+
+                uint16_t cltv_expiry_delta = 0;
+                for (size_t lp = 0; lp < sizeof(uint16_t); lp++) {
+                    cltv_expiry_delta <<= 8;
+                    cltv_expiry_delta |= *p++;
+                }
+                printf("cltv_expiry_delta= %d\n", cltv_expiry_delta);
+            }
+        }
+        break;
+    default:
+        if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
+        d_len =  (len * 5) / 8;
+        for (size_t lp = 0; lp < d_len; lp++) {
             printf("%02x", p_data[lp]);
         }
     }
