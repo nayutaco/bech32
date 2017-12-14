@@ -45,6 +45,8 @@ static const char charset[] = {
 static const char hrp_str[][5] = {
     { 'b', 'c', '\0' },
     { 't', 'b', '\0' },
+    { 'B', 'C', '\0' },
+    { 'T', 'B', '\0' },
     { 'l', 'n', 'b', 'c', '\0' },
     { 'l', 'n', 't', 'b', '\0' }
 };

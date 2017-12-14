@@ -14,6 +14,12 @@ static int get_hrp_type(const char *hrp) {
     if (strcmp(hrp, "tb") == 0) {
         return SEGWIT_ADDR_TESTNET;
     }
+    if (strcmp(hrp, "BC") == 0) {
+        return SEGWIT_ADDR_MAINNET2;
+    }
+    if (strcmp(hrp, "TB") == 0) {
+        return SEGWIT_ADDR_TESTNET2;
+    }
     if (strcmp(hrp, "lnbc") == 0) {
         return LN_INVOICE_MAINNET;
     }
@@ -59,13 +65,13 @@ struct invalid_address_data {
 };
 
 static struct valid_address_data valid_address[] = {
-    //{
-    //    "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
-    //    22, {
-    //        0x00, 0x14, 0x75, 0x1e, 0x76, 0xe8, 0x19, 0x91, 0x96, 0xd4, 0x54,
-    //        0x94, 0x1c, 0x45, 0xd1, 0xb3, 0xa3, 0x23, 0xf1, 0x43, 0x3b, 0xd6
-    //    }
-    //},
+    {
+        "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
+        22, {
+            0x00, 0x14, 0x75, 0x1e, 0x76, 0xe8, 0x19, 0x91, 0x96, 0xd4, 0x54,
+            0x94, 0x1c, 0x45, 0xd1, 0xb3, 0xa3, 0x23, 0xf1, 0x43, 0x3b, 0xd6
+        }
+    },
     {
         "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7",
         34, {
@@ -84,12 +90,12 @@ static struct valid_address_data valid_address[] = {
             0x45, 0xd1, 0xb3, 0xa3, 0x23, 0xf1, 0x43, 0x3b, 0xd6
         }
     },
-    //{
-    //    "BC1SW50QA3JX3S",
-    //    4, {
-    //       0x60, 0x02, 0x75, 0x1e
-    //    }
-    //},
+    {
+        "BC1SW50QA3JX3S",
+        4, {
+           0x60, 0x02, 0x75, 0x1e
+        }
+    },
     {
         "bc1zw508d6qejxtdg4y5r3zarvaryvg6kdaj",
         18, {
@@ -111,10 +117,10 @@ static struct valid_address_data valid_address[] = {
 static const char* invalid_address[] = {
     "tc1qw508d6qejxtdg4y5r3zarvary0c5xw7kg3g4ty",
     "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5",
-    //"BC13W508D6QEJXTDG4Y5R3ZARVARY0C5XW7KN40WF2",
+    "BC13W508D6QEJXTDG4Y5R3ZARVARY0C5XW7KN40WF2",
     "bc1rw5uspcuh",
     "bc10w508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7kw5rljs90",
-    //"BC1QR508D6QEJXTDG4Y5R3ZARVARYV98GJ9P",
+    "BC1QR508D6QEJXTDG4Y5R3ZARVARYV98GJ9P",
     "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sL5k7",
     "bc1zw508d6qejxtdg4y5r3zarvaryvqyzf3du",
     "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3pjxtptv",
@@ -122,7 +128,7 @@ static const char* invalid_address[] = {
 };
 
 static struct invalid_address_data invalid_address_enc[] = {
-    //{"BC", 0, 20},
+    {"BC", 0, 20},
     {"bc", 0, 21},
     {"bc", 17, 32},
     {"bc", 1, 1},
@@ -245,6 +251,14 @@ int main(void) {
             ret = segwit_addr_decode(&witver, witprog, &witprog_len, hrp_type, valid_address[i].address);
         }
         if (!ret) {
+            hrp_type = SEGWIT_ADDR_MAINNET2;
+            ret = segwit_addr_decode(&witver, witprog, &witprog_len, hrp_type, valid_address[i].address);
+        }
+        if (!ret) {
+            hrp_type = SEGWIT_ADDR_TESTNET2;
+            ret = segwit_addr_decode(&witver, witprog, &witprog_len, hrp_type, valid_address[i].address);
+        }
+        if (!ret) {
             printf("segwit_addr_decode fails: '%s'\n", valid_address[i].address);
             ok = 0;
         }
@@ -268,11 +282,11 @@ int main(void) {
         size_t witprog_len;
         int witver;
         int ok = 1;
-        if (segwit_addr_decode(&witver, witprog, &witprog_len, get_hrp_type("bc"), invalid_address[i])) {
+        if (segwit_addr_decode(&witver, witprog, &witprog_len, SEGWIT_ADDR_MAINNET, invalid_address[i])) {
             printf("segwit_addr_decode succeeds on invalid address '%s'\n", invalid_address[i]);
             ok = 0;
         }
-        if (segwit_addr_decode(&witver, witprog, &witprog_len, get_hrp_type("tb"), invalid_address[i])) {
+        if (segwit_addr_decode(&witver, witprog, &witprog_len, SEGWIT_ADDR_TESTNET, invalid_address[i])) {
             printf("segwit_addr_decode succeeds on invalid address '%s'\n", invalid_address[i]);
             ok = 0;
         }
@@ -288,7 +302,7 @@ int main(void) {
     }
 #endif
     for (i = 0; i < sizeof(ln_valid_address) / sizeof(ln_valid_address[0]); ++i) {
-        printf("=[%d]=============================\n", i);
+        printf("=[%d]=============================\n", (int)i);
         uint8_t invoice[256];
         size_t inv_len;
         int hrp_type = LN_INVOICE_MAINNET;
