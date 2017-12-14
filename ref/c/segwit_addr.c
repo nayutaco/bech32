@@ -23,6 +23,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <time.h>
 
 #include "segwit_addr.h"
 
@@ -369,8 +370,8 @@ for (int lp = 0; lp < 64; lp++) {
 printf("\n\n");
 
     //timestamp(7 chars)
-    uint64_t ts = convert_be64(data, 7);
-    printf("timestamp= %" PRIu64 "\n",ts);
+    time_t tm = (time_t)convert_be64(data, 7);
+    printf("timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
 
     //tagged fields
     printf("data_len=%d\n", (int)data_len);
