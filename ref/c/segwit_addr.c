@@ -24,7 +24,11 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <time.h>
+#include <assert.h>
 
+#include "mbedtls/sha256.h"
+
+#include "ucoin.h"
 #include "segwit_addr.h"
 
 uint32_t bech32_polymod_step(uint32_t pre) {
@@ -178,7 +182,7 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
 //  in [01 0c 12 1f1c 19 02]
 //  outbits:8
 //とした場合、out[0x0b 0x25 0xfe 0x64 0x40]が出ていく。
-//最後の0x40は最下位bitの0数はinbitsと同じなため、[0x59 x92f 0xf3 0x22]として処理すべきと考えられるが、そうはできない。
+//最後の0x40は最下位bitの0数はinbitsと同じなため、[0x59 x92f 0xf3 0x22]とはならない。
 //その場合は、64bitまでであればconvert_be64()を使用する。
 static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, bool pad) {
     uint32_t val = 0;
@@ -405,20 +409,68 @@ bool ln_invoice_decode(uint8_t* ivcdata, size_t* ivcdata_len, uint8_t hrp_type, 
      * | timestamp         |
      * | (tagged fields)   |
      * | signature         |
+     * | recovery ID       |
      * | checksum          |
      * +-------------------+
      */
     const uint8_t *p_tag = data + 7;
     const uint8_t *p_sig = data + data_len - 104;
 
+uint8_t *pdata = (uint8_t *)malloc(((data_len - 104) * 5 + 7) / 8);
+size_t pdata_len = 0;
+if (!convert_bits(pdata, &pdata_len, 8, data, data_len - 104, 5, true)) { printf("fail\n"); return false;}
+
+size_t total_len = (strlen(hrp_actual) + pdata_len) * 2;
+char *pdata_str = (char *)malloc(total_len + 1);
+pdata_str[0] = '\0';
+for (int lp = 0; lp < strlen(hrp_actual); lp++) {
+    char str[3];
+    sprintf(str, "%02x", hrp_actual[lp]);
+    strcat(pdata_str, str);
+}
+for (int lp = 0; lp < pdata_len; lp++) {
+    char str[3];
+    sprintf(str, "%02x", pdata[lp]);
+    strcat(pdata_str, str);
+}
+free(pdata);
+printf("pdata= %s\n", pdata_str);
+
+    //hash
+    uint8_t hash[UCOIN_SZ_SHA256];
+//    uint8_t *p = (uint8_t *)malloc(strlen(hrp_actual) + data_len - 104);
+    mbedtls_sha256((uint8_t *)pdata_str, total_len, hash, 0);
+printf("hash= ");
+for (int lp = 0; lp < UCOIN_SZ_SHA256; lp++) {
+    printf("%02x", hash[lp]);
+}
+printf("\n\n");
+
+    const uint8_t priv[] = {
+        0xe1, 0x26, 0xf6, 0x8f, 0x7e, 0xaf, 0xcc, 0x8b,
+        0x74, 0xf5, 0x4d, 0x26, 0x9f, 0xe2, 0x06, 0xbe,
+        0x71, 0x50, 0x00, 0xf9, 0x4d, 0xac, 0x06, 0x7d,
+        0x1c, 0x04, 0xa8, 0xca, 0x3b, 0x2d, 0xb7, 0x34,
+    };
+    uint8_t sig_rs[UCOIN_SZ_SIGN_RS];
+    bool b = ucoin_tx_sign_rs(sig_rs, hash, priv);
+    assert(b);
+printf("sig= ");
+for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
+    printf("%02x", sig_rs[lp]);
+}
+printf("\n\n");
+
     //signature(104 chars)
     uint8_t sig[65];
     size_t sig_len = 0;
     if (!convert_bits(sig, &sig_len, 8, p_sig, 104, 5, false)) return false;
 printf("sig_len=%d\n", (int)sig_len);
-for (int lp = 0; lp < 64; lp++) {
+for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
     printf("%02x", sig[lp]);
 }
+printf("\n");
+printf("recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
 printf("\n\n");
 
     //timestamp(7 chars)

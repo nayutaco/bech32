@@ -39,6 +39,7 @@ C_SOURCE_FILES += $(PRJ_PATH)segwit_addr.c
 
 #includes common to all targets
 INC_PATHS += -I.
+INC_PATHS += -I../../../../include -I../../../../libs/install/include
 
 LISTING_DIRECTORY = $(OBJECT_DIRECTORY)
 

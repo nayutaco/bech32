@@ -243,7 +243,7 @@ int main(void) {
         fail += !ok;
     }
 #endif
-#if 1
+#if 0
     for (i = 0; i < sizeof(valid_address) / sizeof(valid_address[0]); ++i) {
         uint8_t witprog[40];
         size_t witprog_len;
