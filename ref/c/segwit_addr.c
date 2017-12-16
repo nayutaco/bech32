@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <inttypes.h>
 #include <time.h>
 #include <assert.h>
@@ -394,11 +395,20 @@ bool ln_invoice_decode(uint8_t hrp_type, const char* invoice, const uint8_t *pPu
     if (strncmp(hrp_str[hrp_type], hrp_actual, 4) != 0) return false;
     size_t amt_len = strlen(hrp_actual) - 4;
     if (amt_len > 0) {
-        printf("amount= ");
-        for (size_t lp = 0; lp < amt_len; lp++) {
-            printf("%c", hrp_actual[4 + lp]);
+        char amount_str[20];
+        char unit;
+
+        if ((hrp_actual[4] < '1') || ('9' < hrp_actual[4])) return false;
+        for (size_t lp = 1; lp < amt_len - 1; lp++) {
+            if (!isdigit(hrp_actual[4 + lp])) return false;
         }
-        printf("\n");
+        memcpy(amount_str, hrp_actual + 4, amt_len - 1);
+        amount_str[amt_len - 1] = '\0';
+        char *endptr = NULL;
+        uint64_t amount = (uint64_t)strtoull(amount_str, &endptr, 10);
+        unit = hrp_actual[4 + amt_len - 1];
+        if ((unit != 'm') && (unit != 'u') && (unit != 'n') && (unit != 'p')) return false;
+        printf("amount = %" PRIu64 " %cBTC\n", amount, unit);
     }
 
     /*
