@@ -136,10 +136,6 @@ struct valid_invoice_data {
     const uint8_t pubkey[UCOIN_SZ_PUBKEY];
     const uint8_t payment_hash[UCOIN_SZ_SHA256];
 };
-
-static uint8_t LN_PRIVKEY[] = {
-    0xe1, 0x26, 0xf6, 0x8f, 0x7e, 0xaf, 0xcc, 0x8b, 0x74, 0xf5, 0x4d, 0x26, 0x9f, 0xe2, 0x06, 0xbe, 0x71, 0x50, 0x00, 0xf9, 0x4d, 0xac, 0x06, 0x7d, 0x1c, 0x04, 0xa8, 0xca, 0x3b, 0x2d, 0xb7, 0x34,
-};
 static struct valid_invoice_data ln_valid_invoice[] = {
     {
         "lnbc1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq8rkx3yf5tcsyz3d73gafnh3cax9rn449d9p5uxz9ezhhypd0elx87sjle52x86fux2ypatgddc6k63n7erqz25le42c4u4ecky03ylcqca784w",
@@ -243,7 +239,7 @@ int main(void) {
         fail += !ok;
     }
 #endif
-#if 0
+#if 1
     for (i = 0; i < sizeof(valid_address) / sizeof(valid_address[0]); ++i) {
         uint8_t witprog[40];
         size_t witprog_len;
@@ -311,14 +307,12 @@ int main(void) {
 #endif
     for (i = 0; i < sizeof(ln_valid_invoice) / sizeof(ln_valid_invoice[0]); ++i) {
         printf("=[%d]=============================\n", (int)i);
-        uint8_t invoice[256];
-        size_t inv_len;
         int hrp_type = LN_INVOICE_MAINNET;
         int ok = 1;
-        int ret = ln_invoice_decode(invoice, &inv_len, hrp_type, ln_valid_invoice[i].invoice);
+        int ret = ln_invoice_decode(hrp_type, ln_valid_invoice[i].invoice, ln_valid_invoice[i].pubkey);
         if (!ret) {
             hrp_type = LN_INVOICE_TESTNET;
-            ret = ln_invoice_decode(invoice, &inv_len, hrp_type, ln_valid_invoice[i].invoice);
+            ret = ln_invoice_decode(hrp_type, ln_valid_invoice[i].invoice, ln_valid_invoice[i].pubkey);
         }
         if (!ret) {
             printf("ln_invoice_decode fails: '%s'\n", ln_valid_invoice[i].invoice);

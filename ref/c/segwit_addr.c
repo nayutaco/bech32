@@ -385,7 +385,7 @@ bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t
     return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
 }
 
-bool ln_invoice_decode(uint8_t* ivcdata, size_t* ivcdata_len, uint8_t hrp_type, const char* invoice) {
+bool ln_invoice_decode(uint8_t hrp_type, const char* invoice, const uint8_t *pPubKey) {
     uint8_t data[584];
     char hrp_actual[84];
     size_t data_len;
@@ -416,62 +416,36 @@ bool ln_invoice_decode(uint8_t* ivcdata, size_t* ivcdata_len, uint8_t hrp_type, 
     const uint8_t *p_tag = data + 7;
     const uint8_t *p_sig = data + data_len - 104;
 
-uint8_t *pdata = (uint8_t *)malloc(((data_len - 104) * 5 + 7) / 8);
-size_t pdata_len = 0;
-if (!convert_bits(pdata, &pdata_len, 8, data, data_len - 104, 5, true)) { printf("fail\n"); return false;}
-
-size_t total_len = (strlen(hrp_actual) + pdata_len) * 2;
-char *pdata_str = (char *)malloc(total_len + 1);
-pdata_str[0] = '\0';
-for (int lp = 0; lp < strlen(hrp_actual); lp++) {
-    char str[3];
-    sprintf(str, "%02x", hrp_actual[lp]);
-    strcat(pdata_str, str);
-}
-for (int lp = 0; lp < pdata_len; lp++) {
-    char str[3];
-    sprintf(str, "%02x", pdata[lp]);
-    strcat(pdata_str, str);
-}
-free(pdata);
-printf("pdata= %s\n", pdata_str);
+    //preimage
+    uint8_t *pdata = (uint8_t *)malloc(((data_len - 104) * 5 + 7) / 8);
+    size_t pdata_len = 0;
+    if (!convert_bits(pdata, &pdata_len, 8, data, data_len - 104, 5, true)) return false;
+    size_t len_hrp = strlen(hrp_actual);
+    size_t total_len = len_hrp + pdata_len;
+    uint8_t *preimg = (uint8_t *)malloc(total_len);
+    memcpy(preimg, hrp_actual, len_hrp);
+    memcpy(preimg + len_hrp, pdata, pdata_len);
+    free(pdata);
 
     //hash
     uint8_t hash[UCOIN_SZ_SHA256];
-//    uint8_t *p = (uint8_t *)malloc(strlen(hrp_actual) + data_len - 104);
-    mbedtls_sha256((uint8_t *)pdata_str, total_len, hash, 0);
-printf("hash= ");
-for (int lp = 0; lp < UCOIN_SZ_SHA256; lp++) {
-    printf("%02x", hash[lp]);
-}
-printf("\n\n");
-
-    const uint8_t priv[] = {
-        0xe1, 0x26, 0xf6, 0x8f, 0x7e, 0xaf, 0xcc, 0x8b,
-        0x74, 0xf5, 0x4d, 0x26, 0x9f, 0xe2, 0x06, 0xbe,
-        0x71, 0x50, 0x00, 0xf9, 0x4d, 0xac, 0x06, 0x7d,
-        0x1c, 0x04, 0xa8, 0xca, 0x3b, 0x2d, 0xb7, 0x34,
-    };
-    uint8_t sig_rs[UCOIN_SZ_SIGN_RS];
-    bool b = ucoin_tx_sign_rs(sig_rs, hash, priv);
-    assert(b);
-printf("sig= ");
-for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
-    printf("%02x", sig_rs[lp]);
-}
-printf("\n\n");
+    mbedtls_sha256((uint8_t *)preimg, total_len, hash, 0);
+    free(preimg);
 
     //signature(104 chars)
     uint8_t sig[65];
     size_t sig_len = 0;
     if (!convert_bits(sig, &sig_len, 8, p_sig, 104, 5, false)) return false;
-printf("sig_len=%d\n", (int)sig_len);
-for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
-    printf("%02x", sig[lp]);
-}
-printf("\n");
-printf("recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
-printf("\n\n");
+    printf("sig= ");
+    for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
+        printf("%02x", sig[lp]);
+    }
+    printf("\n");
+    printf("recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
+    printf("\n\n");
+
+    //verify
+    if (!ucoin_tx_verify_rs(sig, hash, pPubKey)) return false;
 
     //timestamp(7 chars)
     time_t tm = (time_t)convert_be64(data, 7);
