@@ -307,14 +307,13 @@ int main(void) {
 #endif
     for (i = 0; i < sizeof(ln_valid_invoice) / sizeof(ln_valid_invoice[0]); ++i) {
         printf("=[%d]=============================\n", (int)i);
-        int hrp_type = LN_INVOICE_MAINNET;
+        uint8_t hrp_type;
+        uint64_t amount;
         int ok = 1;
-        int ret = ln_invoice_decode(hrp_type, ln_valid_invoice[i].invoice, ln_valid_invoice[i].pubkey);
-        if (!ret) {
-            hrp_type = LN_INVOICE_TESTNET;
-            ret = ln_invoice_decode(hrp_type, ln_valid_invoice[i].invoice, ln_valid_invoice[i].pubkey);
-        }
-        if (!ret) {
+        int ret = ln_invoice_decode(&hrp_type, &amount, ln_valid_invoice[i].invoice, ln_valid_invoice[i].pubkey);
+        if (ret) {
+            printf("hrp_type:%d, amount=%" PRIu64 "\n", hrp_type, amount);
+        } else {
             printf("ln_invoice_decode fails: '%s'\n", ln_valid_invoice[i].invoice);
             ok = 0;
         }

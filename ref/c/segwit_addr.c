@@ -200,6 +200,7 @@ static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_
     if (pad) {
         if (bits) {
             out[(*outlen)++] = (val << (outbits - bits)) & maxv;
+            printf("bits:%d\n", bits);
         }
     } else if (((val << (outbits - bits)) & maxv) || bits >= inbits) {
         return false;
@@ -231,39 +232,39 @@ static uint64_t convert_32(const uint8_t *p_data, size_t dlen)
 
 static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
 {
-    printf("------------------\n");
+    fprintf(stderr, "------------------\n");
     uint8_t tag = *p_tag;
     switch (tag) {
     case 1:
-        printf("payment_hash\n");
+        fprintf(stderr, "payment_hash\n");
         break;
     case 13:
-        printf("purpose of payment(ASCII)\n");
+        fprintf(stderr, "purpose of payment(ASCII)\n");
         break;
     case 19:
-        printf("pubkey of payee node\n");
+        fprintf(stderr, "pubkey of payee node\n");
         break;
     case 23:
-        printf("purpose of payment(SHA256)\n");
+        fprintf(stderr, "purpose of payment(SHA256)\n");
         break;
     case 6:
-        printf("expiry second\n");
+        fprintf(stderr, "expiry second\n");
         break;
     case 24:
-        printf("min_final_cltv_expiry\n");
+        fprintf(stderr, "min_final_cltv_expiry\n");
         break;
     case 9:
-        printf("Fallback on-chain\n");
+        fprintf(stderr, "Fallback on-chain\n");
         break;
     case 3:
-        printf("extra routing info\n");
+        fprintf(stderr, "extra routing info\n");
         break;
     default:
-        printf("unknown tag: %02x\n", *p_tag);
+        fprintf(stderr, "unknown tag: %02x\n", *p_tag);
         break;
     }
     int len = p_tag[1] * 0x20 + p_tag[2];
-    printf("  len=%d\n", len);
+    fprintf(stderr, "  len=%d\n", len);
     p_tag += 3;
     uint8_t *p_data = (uint8_t *)malloc((len * 5 + 7) / 8); //確保サイズは切り上げ
     size_t d_len = 0;
@@ -273,14 +274,14 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
         if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
         d_len =  (len * 5) / 8;
         for (size_t lp = 0; lp < d_len; lp++) {
-            printf("%c", p_data[lp]);
+            fprintf(stderr, "%c", p_data[lp]);
         }
         break;
     case 6:
         //expiry second
         {
             uint64_t expiry = convert_32(p_tag, len);
-            printf("expiry=%" PRIu32 "\n", (uint32_t)expiry);
+            fprintf(stderr, "invoice expiry=%" PRIu32 "\n", (uint32_t)expiry);
         }
         break;
     case 3:
@@ -293,39 +294,39 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
             const uint8_t *p = p_data;
 
             for (int lp2 = 0; lp2 < d_len / 51; lp2++) {
-                printf("-----------\npubkey= ");
+                fprintf(stderr, "-----------\npubkey= ");
                 for (size_t lp = 0; lp < 33; lp++) {
-                    printf("%02x", *p++);
+                    fprintf(stderr, "%02x", *p++);
                 }
-                printf("\n");
+                fprintf(stderr, "\n");
 
                 uint64_t short_channel_id = 0;
                 for (size_t lp = 0; lp < sizeof(uint64_t); lp++) {
                     short_channel_id <<= 8;
                     short_channel_id |= *p++;
                 }
-                printf("short_channel_id= %016" PRIx64 "\n", short_channel_id);
+                fprintf(stderr, "short_channel_id= %016" PRIx64 "\n", short_channel_id);
 
                 uint32_t fee_base_msat = 0;
                 for (size_t lp = 0; lp < sizeof(uint32_t); lp++) {
                     fee_base_msat <<= 8;
                     fee_base_msat |= *p++;
                 }
-                printf("fee_base_msat= %d\n", fee_base_msat);
+                fprintf(stderr, "fee_base_msat= %d\n", fee_base_msat);
 
                 uint32_t fee_proportional_millionths = 0;
                 for (size_t lp = 0; lp < sizeof(uint32_t); lp++) {
                     fee_proportional_millionths <<= 8;
                     fee_proportional_millionths |= *p++;
                 }
-                printf("fee_proportional_millionths= %d\n", fee_proportional_millionths);
+                fprintf(stderr, "fee_proportional_millionths= %d\n", fee_proportional_millionths);
 
                 uint16_t cltv_expiry_delta = 0;
                 for (size_t lp = 0; lp < sizeof(uint16_t); lp++) {
                     cltv_expiry_delta <<= 8;
                     cltv_expiry_delta |= *p++;
                 }
-                printf("cltv_expiry_delta= %d\n", cltv_expiry_delta);
+                fprintf(stderr, "cltv_expiry_delta= %d\n", cltv_expiry_delta);
             }
         }
         break;
@@ -333,10 +334,10 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
         if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
         d_len =  (len * 5) / 8;
         for (size_t lp = 0; lp < d_len; lp++) {
-            printf("%02x", p_data[lp]);
+            fprintf(stderr, "%02x", p_data[lp]);
         }
     }
-    printf("\n\n");
+    fprintf(stderr, "\n\n");
     free(p_data);
 
     *p_len = 3 + len;
@@ -373,30 +374,64 @@ bool segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint
     return true;
 }
 
-bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len) {
-    uint8_t data[65];
+#if 0
+bool ln_invoice_encode(char *output, uint8_t hrp_type, uint64_t Amount, const uint8_t *pPayHash, const uint8_t *pPrivKey) {
+    uint8_t data[1024];
     size_t datalen = 0;
-    if (witver > 16) return false;
-    if (witver == 0 && witprog_len != 20 && witprog_len != 32) return false;
-    if (witprog_len < 2 || witprog_len > 40) return false;
     if ((hrp_type != LN_INVOICE_MAINNET) && (hrp_type != LN_INVOICE_TESTNET)) return false;
-    data[0] = witver;
-    if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, true)) return false;
+
+    //timestamp
+    time_t now = time(NULL);
+    uint8_t tmval[4];
+    tmval[0] = (now >> 24) & 0xff;
+    tmval[1] = (now >> 16) & 0xff;
+    tmval[2] = (now >>  8) & 0xff;
+    tmval[3] = now & 0xff;
+    if (!convert_bits(data, &datalen, 5, tmval, sizeof(tmval), 8, true)) return false;
+
+    //tagged field(payee pubkey)
+    uint8_t pubkey[UCOIN_SZ_PUBKEY];
+    ucoin_keys_priv2pub(pubkey, pPrivKey);
+    data[datalen++] = 'n';
+    data[datalen++] = 'p';
+    data[datalen++] = 'z';
+    if (!convert_bits(data + datalen, &datalen, 5, pubkey, sizeof(pubkey), 8, true)) return false;
+
+    //tagged field(payment_hash)
+    data[datalen++] = 'n';
+    data[datalen++] = 'p';
+    data[datalen++] = 'q';
+    if (!convert_bits(data, &datalen, 5, pPayHash, UCOIN_SZ_SHA256, 8, true)) return false;
+    
+    //signature
+    uint8_t hash[UCOIN_SZ_SHA256];
+    mbedtls_sha256(data, datalen, hash, 0);
+    uint8_t sign[UCOIN_SZ_SIGN_RS];
+    bool ret = ucoin_tx_sign_rs(sign, hash, pPrivKey);
+    if (!convert_bits(data, &datalen, 5, sign, sizoef(sign), 8, true)) return false;
+
+    //revocation ID
+    //  timestamp(4) + 
     ++datalen;
     return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
 }
+#endif
 
-bool ln_invoice_decode(uint8_t hrp_type, const char* invoice, const uint8_t *pPubKey) {
-    uint8_t data[584];
+bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoice, const uint8_t *pPubKey) {
+    uint8_t data[1024];
     char hrp_actual[84];
     size_t data_len;
-    if ((hrp_type != LN_INVOICE_MAINNET) && (hrp_type != LN_INVOICE_TESTNET)) return false;
     if (!bech32_decode(hrp_actual, data, &data_len, invoice, true)) return false;
-    if (strncmp(hrp_str[hrp_type], hrp_actual, 4) != 0) return false;
+    if (strncmp(hrp_str[LN_INVOICE_MAINNET], hrp_actual, 4) == 0) {
+        *p_hrp_type = LN_INVOICE_MAINNET;
+    } else if (strncmp(hrp_str[LN_INVOICE_TESTNET], hrp_actual, 4) == 0) {
+        *p_hrp_type = LN_INVOICE_TESTNET;
+    } else {
+        return false;
+    }
     size_t amt_len = strlen(hrp_actual) - 4;
     if (amt_len > 0) {
         char amount_str[20];
-        char unit;
 
         if ((hrp_actual[4] < '1') || ('9' < hrp_actual[4])) return false;
         for (size_t lp = 1; lp < amt_len - 1; lp++) {
@@ -406,9 +441,16 @@ bool ln_invoice_decode(uint8_t hrp_type, const char* invoice, const uint8_t *pPu
         amount_str[amt_len - 1] = '\0';
         char *endptr = NULL;
         uint64_t amount = (uint64_t)strtoull(amount_str, &endptr, 10);
-        unit = hrp_actual[4 + amt_len - 1];
-        if ((unit != 'm') && (unit != 'u') && (unit != 'n') && (unit != 'p')) return false;
-        printf("amount = %" PRIu64 " %cBTC\n", amount, unit);
+        switch (hrp_actual[4 + amt_len - 1]) {
+            case 'm': amount *= (uint64_t)100000000; break;
+            case 'u': amount *= (uint64_t)100000; break;
+            case 'n': amount *= (uint64_t)100; break;
+            case 'p': amount = (uint64_t)(amount * 0.1); break;
+            default: return false;
+        };
+        *pAmount = amount;
+    } else {
+        *pAmount = 0;
     }
 
     /*
@@ -446,23 +488,23 @@ bool ln_invoice_decode(uint8_t hrp_type, const char* invoice, const uint8_t *pPu
     uint8_t sig[65];
     size_t sig_len = 0;
     if (!convert_bits(sig, &sig_len, 8, p_sig, 104, 5, false)) return false;
-    printf("sig= ");
+    fprintf(stderr, "sig= ");
     for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
-        printf("%02x", sig[lp]);
+        fprintf(stderr, "%02x", sig[lp]);
     }
-    printf("\n");
-    printf("recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
-    printf("\n\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
+    fprintf(stderr, "\n\n");
 
     //verify
     if (!ucoin_tx_verify_rs(sig, hash, pPubKey)) return false;
 
     //timestamp(7 chars)
     time_t tm = (time_t)convert_be64(data, 7);
-    printf("timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
+    fprintf(stderr, "timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
 
     //tagged fields
-    printf("data_len=%d\n", (int)data_len);
+    fprintf(stderr, "data_len=%d\n", (int)data_len);
     bool ret = true;
     while (p_tag < p_sig) {
         size_t len;

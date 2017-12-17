@@ -75,8 +75,8 @@ bool segwit_addr_decode(
 );
 
 
-bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len);
-bool ln_invoice_decode(uint8_t hrp_type, const char* invoice, const uint8_t *pPubKey);
+//bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len);
+bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoice, const uint8_t *pPubKey);
 
 #ifdef __cplusplus
 }
