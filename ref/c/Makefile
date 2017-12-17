@@ -39,6 +39,7 @@ C_SOURCE_FILES += $(PRJ_PATH)segwit_addr.c
 
 #includes common to all targets
 INC_PATHS += -I.
+INC_PATHS += -I../../../../include -I../../../../libs/install/include
 
 LISTING_DIRECTORY = $(OBJECT_DIRECTORY)
 
@@ -102,7 +103,7 @@ vpath %.c $(C_PATHS)
 
 OBJECTS = $(C_OBJECTS) $(ASM_OBJECTS)
 
-debug: CFLAGS += -DDEBUG -DUCOIN_DEBUG -DUCOIN_USE_PRINTFUNC -DUCOIN_DEBUG_MEM
+debug: CFLAGS += -DDEBUG -DUCOIN_DEBUG -DUCOIN_DEBUG_MEM
 debug: CFLAGS += -ggdb3 -O0
 debug: LDFLAGS += -ggdb3 -O0
 debug: $(BUILD_DIRECTORIES) $(OBJECTS)
@@ -134,13 +135,13 @@ cppcheck:
 	cppcheck --enable=all --suppress=missingIncludeSystem -D__ORDER_LITTLE_ENDIAN__ -DDEBUG -DUCOIN_DEBUG -DUCOIN_USE_PRINTFUNC -DUCOIN_DEBUG_MEM $(INC_PATHS) $(PRJ_PATH)*.c
 
 clean:
-	$(RM) $(OBJECT_DIRECTORY) $(OUTPUT_BINARY_DIRECTORY)/$(OUTPUT_FILENAME) .Depend
+	$(RM) $(OBJECT_DIRECTORY) $(OUTPUT_BINARY_DIRECTORY)/$(OUTPUT_FILENAME) .Depend tst
 
 test:
-	@rm -f tst > /dev/null 2>&1
-	@$(NO_ECHO)$(CC) $(CFLAGS) $(INC_PATHS) -o tst tests.c
+	@$(RM) tst
+	@$(NO_ECHO)$(CC) $(CFLAGS) $(INC_PATHS) -I../../../../include -o tst tests.c -L../../../.. -L../../../install/lib -lucoin -llmdb -lsodium -lbase58 -lmbedcrypto -pthread
 	@./tst
-	@rm tst
+	@$(RM) tst
 
 ################################
 

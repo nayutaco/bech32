@@ -27,6 +27,10 @@
 
 #define SEGWIT_ADDR_MAINNET     ((uint8_t)0)
 #define SEGWIT_ADDR_TESTNET     ((uint8_t)1)
+#define SEGWIT_ADDR_MAINNET2    ((uint8_t)2)
+#define SEGWIT_ADDR_TESTNET2    ((uint8_t)3)
+#define LN_INVOICE_MAINNET      ((uint8_t)4)
+#define LN_INVOICE_TESTNET      ((uint8_t)5)
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,6 +73,10 @@ bool segwit_addr_decode(
     uint8_t hrp_type,
     const char* addr
 );
+
+
+//bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len);
+bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoice, const uint8_t *pPubKey);
 
 #ifdef __cplusplus
 }
