@@ -13,7 +13,6 @@ if __name__ == "__main__":
     if nodeid is None:
         print('fail decode')
         quit()
-    print('node_id= ', end='')
     for bt in nodeid:
         print(format(bt, '02x'), end='')
     print('')
