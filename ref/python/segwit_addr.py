@@ -121,3 +121,11 @@ def encode(hrp, witver, witprog):
     if decode(hrp, ret) == (None, None):
         return None
     return ret
+
+
+def lnnode_decode(lnaddr):
+    hrpgot, data = bech32_decode(lnaddr)
+    if hrpgot != 'ln':
+        print('not ln addr: ', hrpgot)
+        return None
+    return convertbits(data, 5, 8, False)
