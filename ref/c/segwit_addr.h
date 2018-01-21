@@ -24,6 +24,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "ln.h"
 
 #define SEGWIT_ADDR_MAINNET     ((uint8_t)0)
 #define SEGWIT_ADDR_TESTNET     ((uint8_t)1)
@@ -75,8 +76,27 @@ bool segwit_addr_decode(
 );
 
 
+typedef struct ln_invoice_t {
+    uint8_t     hrp_type;
+    uint64_t    amount_msat;
+    uint64_t    timestamp;
+    uint32_t    min_final_cltv_expiry;
+    uint8_t     pubkey[UCOIN_SZ_PUBKEY];
+    uint8_t     payment_hash[UCOIN_SZ_SHA256];
+} ln_invoice_t;
+
+
 //bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len);
-bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoice, const uint8_t *pPubKey);
+
+/**
+ *
+ * @param[out]      p_hrp_type
+ * @param[out]      p_amount_msat
+ * @param[out]      p_pubkey
+ * @param[in]       invoice
+ * @return  true:success
+ */
+bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice);
 
 #ifdef __cplusplus
 }

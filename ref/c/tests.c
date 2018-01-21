@@ -307,12 +307,34 @@ int main(void) {
 #endif
     for (i = 0; i < sizeof(ln_valid_invoice) / sizeof(ln_valid_invoice[0]); ++i) {
         printf("=[%d]=============================\n", (int)i);
-        uint8_t hrp_type;
-        uint64_t amount;
         int ok = 1;
-        int ret = ln_invoice_decode(&hrp_type, &amount, ln_valid_invoice[i].invoice, ln_valid_invoice[i].pubkey);
-        if (ret) {
-            printf("hrp_type:%d, amount=%" PRIu64 "\n", hrp_type, amount);
+        ln_invoice_t invoice_data;
+        int ret = ln_invoice_decode(&invoice_data, ln_valid_invoice[i].invoice);
+        if (ret && (memcmp(invoice_data.pubkey, ln_valid_invoice[i].pubkey, UCOIN_SZ_PUBKEY) == 0)) {
+            switch (invoice_data.hrp_type) {
+            case LN_INVOICE_MAINNET:
+                printf("for mainnet\n");
+                break;
+            case LN_INVOICE_TESTNET:
+                printf("for testnet\n");
+                break;
+            default:
+                printf("unknown hrp_type\n");
+            }
+            printf("amount_msat=%" PRIu64 "\n", invoice_data.amount_msat);
+            time_t tm = (time_t)invoice_data.timestamp;
+            printf("timestamp= %" PRIu64 " : %s", (uint64_t)invoice_data.timestamp, ctime(&tm));
+            printf("min_final_cltv_expiry=%d\n", invoice_data.min_final_cltv_expiry);
+            printf("pubkey=");
+            for (int lp = 0; lp < UCOIN_SZ_PUBKEY; lp++) {
+                printf("%02x", invoice_data.pubkey[lp]);
+            }
+            printf("\n");
+            printf("payment_hash=");
+            for (int lp = 0; lp < UCOIN_SZ_SHA256; lp++) {
+                printf("%02x", invoice_data.payment_hash[lp]);
+            }
+            printf("\n");
         } else {
             printf("ln_invoice_decode fails: '%s'\n", ln_valid_invoice[i].invoice);
             ok = 0;

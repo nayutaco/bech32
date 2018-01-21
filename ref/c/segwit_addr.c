@@ -29,7 +29,6 @@
 
 #include "mbedtls/sha256.h"
 
-#include "ucoin.h"
 #include "segwit_addr.h"
 
 uint32_t bech32_polymod_step(uint32_t pre) {
@@ -200,7 +199,7 @@ static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_
     if (pad) {
         if (bits) {
             out[(*outlen)++] = (val << (outbits - bits)) & maxv;
-            printf("bits:%d\n", bits);
+            //printf("bits:%d\n", bits);
         }
     } else if (((val << (outbits - bits)) & maxv) || bits >= inbits) {
         return false;
@@ -230,7 +229,7 @@ static uint64_t convert_32(const uint8_t *p_data, size_t dlen)
     return ret;
 }
 
-static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
+static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_invoice_data)
 {
     fprintf(stderr, "------------------\n");
     uint8_t tag = *p_tag;
@@ -284,6 +283,13 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
             fprintf(stderr, "invoice expiry=%" PRIu32 "\n", (uint32_t)expiry);
         }
         break;
+    case 24:
+        //min_final_cltv_expiry
+        {
+            p_invoice_data->min_final_cltv_expiry = convert_32(p_tag, len);
+
+        }
+        break;
     case 3:
         //extra routing info
         if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
@@ -333,6 +339,9 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag)
     default:
         if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
         d_len =  (len * 5) / 8;
+        if (tag == 1) {
+            memcpy(p_invoice_data->payment_hash, p_data, UCOIN_SZ_SHA256);
+        }
         for (size_t lp = 0; lp < d_len; lp++) {
             fprintf(stderr, "%02x", p_data[lp]);
         }
@@ -402,7 +411,7 @@ bool ln_invoice_encode(char *output, uint8_t hrp_type, uint64_t Amount, const ui
     data[datalen++] = 'p';
     data[datalen++] = 'q';
     if (!convert_bits(data, &datalen, 5, pPayHash, UCOIN_SZ_SHA256, 8, true)) return false;
-    
+
     //signature
     uint8_t hash[UCOIN_SZ_SHA256];
     mbedtls_sha256(data, datalen, hash, 0);
@@ -411,21 +420,22 @@ bool ln_invoice_encode(char *output, uint8_t hrp_type, uint64_t Amount, const ui
     if (!convert_bits(data, &datalen, 5, sign, sizoef(sign), 8, true)) return false;
 
     //revocation ID
-    //  timestamp(4) + 
+    //  timestamp(4) +
     ++datalen;
     return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
 }
 #endif
 
-bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoice, const uint8_t *pPubKey) {
+bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
+    bool ret;
     uint8_t data[1024];
     char hrp_actual[84];
     size_t data_len;
     if (!bech32_decode(hrp_actual, data, &data_len, invoice, true)) return false;
     if (strncmp(hrp_str[LN_INVOICE_MAINNET], hrp_actual, 4) == 0) {
-        *p_hrp_type = LN_INVOICE_MAINNET;
+        p_invoice_data->hrp_type = LN_INVOICE_MAINNET;
     } else if (strncmp(hrp_str[LN_INVOICE_TESTNET], hrp_actual, 4) == 0) {
-        *p_hrp_type = LN_INVOICE_TESTNET;
+        p_invoice_data->hrp_type = LN_INVOICE_TESTNET;
     } else {
         return false;
     }
@@ -440,17 +450,17 @@ bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoi
         memcpy(amount_str, hrp_actual + 4, amt_len - 1);
         amount_str[amt_len - 1] = '\0';
         char *endptr = NULL;
-        uint64_t amount = (uint64_t)strtoull(amount_str, &endptr, 10);
+        uint64_t amount_msat = (uint64_t)strtoull(amount_str, &endptr, 10);
         switch (hrp_actual[4 + amt_len - 1]) {
-            case 'm': amount *= (uint64_t)100000000; break;
-            case 'u': amount *= (uint64_t)100000; break;
-            case 'n': amount *= (uint64_t)100; break;
-            case 'p': amount = (uint64_t)(amount * 0.1); break;
+            case 'm': amount_msat *= (uint64_t)100000000; break;
+            case 'u': amount_msat *= (uint64_t)100000; break;
+            case 'n': amount_msat *= (uint64_t)100; break;
+            case 'p': amount_msat = (uint64_t)(amount_msat * 0.1); break;
             default: return false;
         };
-        *pAmount = amount;
+        p_invoice_data->amount_msat = amount_msat;
     } else {
-        *pAmount = 0;
+        p_invoice_data->amount_msat = 0;
     }
 
     /*
@@ -467,6 +477,8 @@ bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoi
      */
     const uint8_t *p_tag = data + 7;
     const uint8_t *p_sig = data + data_len - 104;
+
+    p_invoice_data->min_final_cltv_expiry = LN_MIN_FINAL_CLTV_EXPIRY;
 
     //preimage
     uint8_t *pdata = (uint8_t *)malloc(((data_len - 104) * 5 + 7) / 8);
@@ -488,27 +500,34 @@ bool ln_invoice_decode(uint8_t *p_hrp_type, uint64_t *pAmount, const char* invoi
     uint8_t sig[65];
     size_t sig_len = 0;
     if (!convert_bits(sig, &sig_len, 8, p_sig, 104, 5, false)) return false;
-    fprintf(stderr, "sig= ");
-    for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
-        fprintf(stderr, "%02x", sig[lp]);
+    //fprintf(stderr, "sig= ");
+    //for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
+    //    fprintf(stderr, "%02x", sig[lp]);
+    //}
+    //fprintf(stderr, "\n");
+    //fprintf(stderr, "recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
+    ret = ucoin_tx_recover_pubkey(p_invoice_data->pubkey, sig[UCOIN_SZ_SIGN_RS], sig, hash);
+    if (ret) {
+        //fprintf(stderr, "recovery pubkey= ");
+        //for (int lp = 0; lp < UCOIN_SZ_PUBKEY; lp++) {
+        //    fprintf(stderr, "%02x", p_invoice_data->pubkey[lp]);
+        //}
+        //fprintf(stderr, "\n");
+    } else {
+        fprintf(stderr, "fail: recovery pubkey\n");
     }
-    fprintf(stderr, "\n");
-    fprintf(stderr, "recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
-    fprintf(stderr, "\n\n");
-
-    //verify
-    if (!ucoin_tx_verify_rs(sig, hash, pPubKey)) return false;
 
     //timestamp(7 chars)
     time_t tm = (time_t)convert_be64(data, 7);
-    fprintf(stderr, "timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
+    p_invoice_data->timestamp = (uint64_t)tm;
+    //fprintf(stderr, "timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
 
     //tagged fields
-    fprintf(stderr, "data_len=%d\n", (int)data_len);
-    bool ret = true;
+    //fprintf(stderr, "data_len=%d\n", (int)data_len);
+    ret = true;
     while (p_tag < p_sig) {
         size_t len;
-        ret = analyze_tag(&len, p_tag);
+        ret = analyze_tag(&len, p_tag, p_invoice_data);
         if (!ret) {
             break;
         }
