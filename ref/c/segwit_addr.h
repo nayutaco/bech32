@@ -82,17 +82,24 @@ typedef struct ln_invoice_t {
     uint64_t    timestamp;
     uint32_t    min_final_cltv_expiry;
     uint8_t     pubkey[UCOIN_SZ_PUBKEY];
-    uint8_t     payment_hash[UCOIN_SZ_SHA256];
+    uint8_t     payment_hash[LN_SZ_HASH];
 } ln_invoice_t;
 
 
-//bool ln_invoice_encode(char *output, uint8_t hrp_type, int witver, const uint8_t *witprog, size_t witprog_len);
-
-/**
+/** Encode a BOLT11 invoice
  *
- * @param[out]      p_hrp_type
- * @param[out]      p_amount_msat
- * @param[out]      p_pubkey
+ * @param[out]      pp_invoice
+ * @param[in]       p_invoice_data
+ * @param[in]       p_privkey
+ * @return  true:success
+ * @note
+ *      - need `free(pp_invoice)' if don't use it.
+ */
+bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data, const uint8_t *p_privkey);
+
+/** Decode a BOLT11 invoice
+ *
+ * @param[out]      p_invoice_data
  * @param[in]       invoice
  * @return  true:success
  */

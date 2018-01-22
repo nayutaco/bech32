@@ -55,9 +55,6 @@ static const char hrp_str[][5] = {
     { 'l', 'n', 'b', 'c', '\0' },
     { 'l', 'n', 't', 'b', '\0' }
 };
-static const uint32_t k_chk[] = {
-    0x2318043, 0x2318282, 0x1772d71a, 0x1772d5db
-};
 static const int8_t charset_rev[128] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -74,20 +71,33 @@ static const int8_t charset_rev[128] = {
  *  Out: output:  Pointer to a buffer of size strlen(hrp) + data_len + 8 that
  *                will be updated to contain the null-terminated Bech32 string.
  *  In: hrp :     Pointer to the non-null-terminated human readable part(length=2).
- *      hrp_chk:  pre-calculated chk
  *      data :    Pointer to an array of 5-bit values.
  *      data_len: Length of the data array.
  *  Returns true if successful.
  */
-static bool bech32_encode(char *output, const char *hrp, uint32_t hrp_chk, const uint8_t *data, size_t data_len) {
-    uint32_t chk = hrp_chk;
-    size_t i;
+static bool bech32_encode(char *output, const char *hrp, const uint8_t *data, size_t data_len) {
+    uint32_t chk = 1;
+    size_t i = 0;
+    while (hrp[i] != 0) {
+        int ch = hrp[i];
+        if (ch < 33 || ch > 126) {
+            printf("fail %d\n", __LINE__);
+            return 0;
+        }
+
+        if (ch >= 'A' && ch <= 'Z') { printf("fail %d\n", __LINE__); return 0; }
+        chk = bech32_polymod_step(chk) ^ (ch >> 5);
+        ++i;
+    }
+    //if (i + 7 + data_len > 90) { printf("fail %d\n", __LINE__); return 0; }
+    chk = bech32_polymod_step(chk);
     while (*hrp != '\0') {
+        chk = bech32_polymod_step(chk) ^ (*hrp & 0x1f);
         *(output++) = *(hrp++);
     }
     *(output++) = '1';
     for (i = 0; i < data_len; ++i) {
-        if (*data >> 5) return false;
+        if (*data >> 5) {printf("bech32_encode: %02x(%02x)\n", *data >> 5, *data); return false;}
         chk = bech32_polymod_step(chk) ^ (*data);
         *(output++) = charset[*(data++)];
     }
@@ -125,6 +135,7 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
         }
     } else {
         if ((input_len < 8) || (90 < input_len)) {
+            printf("fail: %d\n", __LINE__);
             return false;
         }
     }
@@ -134,12 +145,14 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
     }
     hrp_len = input_len - (1 + *data_len);
     if (hrp_len < 1 || *data_len < 6) {
+        printf("fail: %d\n", __LINE__);
         return false;
     }
     *(data_len) -= 6;
     for (i = 0; i < hrp_len; ++i) {
         int ch = input[i];
         if (ch < 33 || ch > 126) {
+            printf("fail: %d\n", __LINE__);
             return false;
         }
         if (ch >= 'a' && ch <= 'z') {
@@ -162,6 +175,7 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
         if (input[i] >= 'a' && input[i] <= 'z') have_lower = 1;
         if (input[i] >= 'A' && input[i] <= 'Z') have_upper = 1;
         if (v == -1) {
+            printf("fail: %d\n", __LINE__);
             return false;
         }
         chk = bech32_polymod_step(chk) ^ v;
@@ -171,6 +185,7 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
         ++i;
     }
     if (have_lower && have_upper) {
+        printf("fail: %d\n", __LINE__);
         return false;
     }
     return chk == 1;
@@ -179,10 +194,10 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
 //inの先頭からinbitsずつ貯めていき、outbitsを超えるとその分をoutに代入していく
 //そのため、
 //  inbits:5
-//  in [01 0c 12 1f1c 19 02]
+//  in [01 0c 12 1f 1c 19 02]
 //  outbits:8
 //とした場合、out[0x0b 0x25 0xfe 0x64 0x40]が出ていく。
-//最後の0x40は最下位bitの0数はinbitsと同じなため、[0x59 x92f 0xf3 0x22]とはならない。
+//最後の0x40は最下位bitの0数はinbitsと同じなため、[0x59 0x2f 0xf3 0x22]とはならない。
 //その場合は、64bitまでであればconvert_be64()を使用する。
 static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_t* in, size_t inlen, int inbits, bool pad) {
     uint32_t val = 0;
@@ -218,16 +233,36 @@ static uint64_t convert_be64(const uint8_t *p_data, size_t dlen)
     return ret;
 }
 
-//32進数として変換
-static uint64_t convert_32(const uint8_t *p_data, size_t dlen)
+//inbits:8, outbits:5で64bitまで変換可能
+static int convert64_to8(uint8_t *p_out, uint64_t val)
 {
-    uint64_t ret = 0;
-    for (size_t lp = 0; lp < dlen; lp++) {
-        ret *= (uint64_t)32;
-        ret += (uint64_t)p_data[lp];
+    int lp;
+    for (lp = 0; lp < sizeof(val); lp++) {
+        p_out[lp] = val & 0x1f;
+        val >>= 5;
+        if (val == 0) {
+            break;
+        }
     }
-    return ret;
+    //swap endian
+    for (int lp2 = 0; lp2 < lp / 2; lp2++) {
+        uint8_t tmp = p_out[lp2];
+        p_out[lp2] = p_out[lp - lp2];
+        p_out[lp - lp2] = tmp;
+    }
+    return lp + 1;
 }
+
+////32進数→10進数変換
+//static uint64_t convert_32(const uint8_t *p_data, size_t dlen)
+//{
+//    uint64_t ret = 0;
+//    for (size_t lp = 0; lp < dlen; lp++) {
+//        ret *= (uint64_t)32;
+//        ret += (uint64_t)p_data[lp];
+//    }
+//    return ret;
+//}
 
 static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_invoice_data)
 {
@@ -235,35 +270,35 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_inv
     uint8_t tag = *p_tag;
     switch (tag) {
     case 1:
-        fprintf(stderr, "payment_hash\n");
+        fprintf(stderr, "[payment_hash]\n");
         break;
     case 13:
-        fprintf(stderr, "purpose of payment(ASCII)\n");
+        fprintf(stderr, "[purpose of payment(ASCII)]\n");
         break;
     case 19:
-        fprintf(stderr, "pubkey of payee node\n");
+        fprintf(stderr, "[pubkey of payee node]\n");
         break;
     case 23:
-        fprintf(stderr, "purpose of payment(SHA256)\n");
+        fprintf(stderr, "[purpose of payment(SHA256)]\n");
         break;
     case 6:
-        fprintf(stderr, "expiry second\n");
+        fprintf(stderr, "[expiry second]\n");
         break;
     case 24:
-        fprintf(stderr, "min_final_cltv_expiry\n");
+        fprintf(stderr, "[min_final_cltv_expiry]\n");
         break;
     case 9:
-        fprintf(stderr, "Fallback on-chain\n");
+        fprintf(stderr, "[Fallback on-chain]\n");
         break;
     case 3:
-        fprintf(stderr, "extra routing info\n");
+        fprintf(stderr, "[extra routing info]\n");
         break;
     default:
         fprintf(stderr, "unknown tag: %02x\n", *p_tag);
         break;
     }
     int len = p_tag[1] * 0x20 + p_tag[2];
-    fprintf(stderr, "  len=%d\n", len);
+    //fprintf(stderr, "  len=%d\n", len);
     p_tag += 3;
     uint8_t *p_data = (uint8_t *)malloc((len * 5 + 7) / 8); //確保サイズは切り上げ
     size_t d_len = 0;
@@ -279,14 +314,14 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_inv
     case 6:
         //expiry second
         {
-            uint64_t expiry = convert_32(p_tag, len);
+            uint64_t expiry = convert_be64(p_tag, len);
             fprintf(stderr, "invoice expiry=%" PRIu32 "\n", (uint32_t)expiry);
         }
         break;
     case 24:
         //min_final_cltv_expiry
         {
-            p_invoice_data->min_final_cltv_expiry = convert_32(p_tag, len);
+            p_invoice_data->min_final_cltv_expiry = convert_be64(p_tag, len);
 
         }
         break;
@@ -340,7 +375,7 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_inv
         if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
         d_len =  (len * 5) / 8;
         if (tag == 1) {
-            memcpy(p_invoice_data->payment_hash, p_data, UCOIN_SZ_SHA256);
+            memcpy(p_invoice_data->payment_hash, p_data, LN_SZ_HASH);
         }
         for (size_t lp = 0; lp < d_len; lp++) {
             fprintf(stderr, "%02x", p_data[lp]);
@@ -363,7 +398,7 @@ bool segwit_addr_encode(char *output, uint8_t hrp_type, int witver, const uint8_
     data[0] = witver;
     if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, true)) return false;
     ++datalen;
-    return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
+    return bech32_encode(output, hrp_str[hrp_type], data, datalen);
 }
 
 bool segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint8_t hrp_type, const char* addr) {
@@ -383,48 +418,92 @@ bool segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint
     return true;
 }
 
-#if 0
-bool ln_invoice_encode(char *output, uint8_t hrp_type, uint64_t Amount, const uint8_t *pPayHash, const uint8_t *pPrivKey) {
+
+bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data, const uint8_t *p_privkey) {
     uint8_t data[1024];
+    char hrp[128];
     size_t datalen = 0;
-    if ((hrp_type != LN_INVOICE_MAINNET) && (hrp_type != LN_INVOICE_TESTNET)) return false;
+    *pp_invoice = NULL;
+    if ((p_invoice_data->hrp_type != LN_INVOICE_MAINNET) && (p_invoice_data->hrp_type != LN_INVOICE_TESTNET)) return false;
+    strcpy(hrp, hrp_str[p_invoice_data->hrp_type]);
+    if (p_invoice_data->amount_msat > 0) {
+        //hrpにamount追加
+        char unit = '\0';
+        uint64_t amount;
+        if ((p_invoice_data->amount_msat / (uint64_t)100000000) * (uint64_t)100000000 == p_invoice_data->amount_msat) {
+            //mBTC
+            unit = 'm';
+            amount = p_invoice_data->amount_msat / (uint64_t)100000000;
+        } else if ((p_invoice_data->amount_msat / (uint64_t)100000) * (uint64_t)100000 == p_invoice_data->amount_msat) {
+            //uBTC
+            unit = 'u';
+            amount = p_invoice_data->amount_msat / (uint64_t)100000;
+        } else if ((p_invoice_data->amount_msat / (uint64_t)100) * (uint64_t)100 == p_invoice_data->amount_msat) {
+            //nBTC
+            unit = 'n';
+            amount = p_invoice_data->amount_msat / (uint64_t)100;
+        } else {
+            //pBTC
+            unit = 'p';
+            amount = p_invoice_data->amount_msat * (uint64_t)10;
+        }
+        char amount_str[20];
+        sprintf(amount_str, "%" PRIu64 "%c", amount, unit);
+        strcat(hrp, amount_str);
+    }
 
     //timestamp
     time_t now = time(NULL);
-    uint8_t tmval[4];
-    tmval[0] = (now >> 24) & 0xff;
-    tmval[1] = (now >> 16) & 0xff;
-    tmval[2] = (now >>  8) & 0xff;
-    tmval[3] = now & 0xff;
-    if (!convert_bits(data, &datalen, 5, tmval, sizeof(tmval), 8, true)) return false;
+    datalen = convert64_to8(data, now);
+
+    uint8_t pubkey[UCOIN_SZ_PUBKEY];
+    ucoin_keys_priv2pub(pubkey, p_privkey);
+    if (memcmp(pubkey, p_invoice_data->pubkey, UCOIN_SZ_PUBKEY) != 0) return false;
 
     //tagged field(payee pubkey)
-    uint8_t pubkey[UCOIN_SZ_PUBKEY];
-    ucoin_keys_priv2pub(pubkey, pPrivKey);
-    data[datalen++] = 'n';
-    data[datalen++] = 'p';
-    data[datalen++] = 'z';
-    if (!convert_bits(data + datalen, &datalen, 5, pubkey, sizeof(pubkey), 8, true)) return false;
+    data[datalen++] = 0x13; // 33-byte public key of the payee node
+    data[datalen++] = 1;  // 264bit --> 53(5bit)
+    data[datalen++] = 21;
+    if (!convert_bits(data, &datalen, 5, pubkey, sizeof(pubkey), 8, true)) return false;
 
     //tagged field(payment_hash)
-    data[datalen++] = 'n';
-    data[datalen++] = 'p';
-    data[datalen++] = 'q';
-    if (!convert_bits(data, &datalen, 5, pPayHash, UCOIN_SZ_SHA256, 8, true)) return false;
+    data[datalen++] = 0x01; // 256-bit SHA256 payment_hash
+    data[datalen++] = 1;    // 256bit --> 52(5bit)
+    data[datalen++] = 20;
+    if (!convert_bits(data, &datalen, 5, p_invoice_data->payment_hash, LN_SZ_HASH, 8, true)) return false;
+
+    //short description
+    data[datalen++] = 13; // short description
+    data[datalen++] = 0;
+    data[datalen++] = 15;
+    if (!convert_bits(data, &datalen, 5, (const uint8_t *)"ptarmigan", 9, 8, true)) return false;
+
+    //ここまで、data[0～datalen-1]に1byteずつ5bitデータが入っている
+    //署名は、これを詰めて8bitにしてhashを取っている
+    uint8_t hashdata[1024];
+    size_t hashdatalen = 0;
+    strcpy((char *)hashdata, hrp);
+    size_t hrp_len = strlen(hrp);
+    convert_bits(hashdata + hrp_len, &hashdatalen, 8, data, datalen, 5, true);
 
     //signature
-    uint8_t hash[UCOIN_SZ_SHA256];
-    mbedtls_sha256(data, datalen, hash, 0);
-    uint8_t sign[UCOIN_SZ_SIGN_RS];
-    bool ret = ucoin_tx_sign_rs(sign, hash, pPrivKey);
-    if (!convert_bits(data, &datalen, 5, sign, sizoef(sign), 8, true)) return false;
+    uint8_t hash[LN_SZ_HASH];
+    mbedtls_sha256(hashdata, hashdatalen + hrp_len, hash, 0);
 
-    //revocation ID
-    //  timestamp(4) +
-    ++datalen;
-    return bech32_encode(output, hrp_str[hrp_type], k_chk[hrp_type], data, datalen);
+    uint8_t sign[UCOIN_SZ_SIGN_RS + 1];
+    bool ret = ucoin_tx_sign_rs(sign, hash, p_privkey);
+    if (!ret) return false;
+
+    int recid;
+    ret = ucoin_tx_recover_pubkey_id(&recid, pubkey, sign, hash);
+    if (!ret) return false;
+    sign[UCOIN_SZ_SIGN_RS] = (uint8_t)recid;
+    if (!convert_bits(data, &datalen, 5, sign, sizeof(sign), 8, true)) return false;
+
+    *pp_invoice = (char *)malloc(2048);
+    return bech32_encode(*pp_invoice, hrp, data, datalen);
 }
-#endif
+
 
 bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
     bool ret;
@@ -492,7 +571,7 @@ bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
     free(pdata);
 
     //hash
-    uint8_t hash[UCOIN_SZ_SHA256];
+    uint8_t hash[LN_SZ_HASH];
     mbedtls_sha256((uint8_t *)preimg, total_len, hash, 0);
     free(preimg);
 
@@ -500,30 +579,19 @@ bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
     uint8_t sig[65];
     size_t sig_len = 0;
     if (!convert_bits(sig, &sig_len, 8, p_sig, 104, 5, false)) return false;
-    //fprintf(stderr, "sig= ");
-    //for (int lp = 0; lp < UCOIN_SZ_SIGN_RS; lp++) {
-    //    fprintf(stderr, "%02x", sig[lp]);
-    //}
-    //fprintf(stderr, "\n");
-    //fprintf(stderr, "recovery ID=%02x\n", sig[UCOIN_SZ_SIGN_RS]);
     ret = ucoin_tx_recover_pubkey(p_invoice_data->pubkey, sig[UCOIN_SZ_SIGN_RS], sig, hash);
-    if (ret) {
-        //fprintf(stderr, "recovery pubkey= ");
-        //for (int lp = 0; lp < UCOIN_SZ_PUBKEY; lp++) {
-        //    fprintf(stderr, "%02x", p_invoice_data->pubkey[lp]);
-        //}
-        //fprintf(stderr, "\n");
-    } else {
+    if (!ret) {
         fprintf(stderr, "fail: recovery pubkey\n");
+        return false;
     }
 
     //timestamp(7 chars)
     time_t tm = (time_t)convert_be64(data, 7);
     p_invoice_data->timestamp = (uint64_t)tm;
-    //fprintf(stderr, "timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
+    fprintf(stderr, "timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
 
     //tagged fields
-    //fprintf(stderr, "data_len=%d\n", (int)data_len);
+    fprintf(stderr, "data_len=%d\n", (int)data_len);
     ret = true;
     while (p_tag < p_sig) {
         size_t len;
