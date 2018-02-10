@@ -26,7 +26,7 @@ static int get_hrp_type(const char *hrp) {
     return -1;
 }
 
-#if 0
+#if 1
 static const char* valid_checksum[] = {
     "A12UEL5L",
     "an83characterlonghumanreadablepartthatcontainsthenumber1andtheexcludedcharactersbio1tt5tgs",
@@ -242,19 +242,19 @@ void print_invoice(const ln_invoice_t *p_invoice_data) {
 int main(void) {
     size_t i;
     int fail = 0;
-#if 0
+#if 1
     for (i = 0; i < sizeof(valid_checksum) / sizeof(valid_checksum[0]); ++i) {
         uint8_t data[82];
         char rebuild[92];
         char hrp[84];
         size_t data_len;
         int ok = 1;
-        if (!bech32_decode(hrp, data, &data_len, valid_checksum[i])) {
+        if (!bech32_decode(hrp, data, &data_len, valid_checksum[i], false)) {
             printf("bech32_decode fails: '%s'\n", valid_checksum[i]);
             ok = 0;
         }
         if (ok) {
-            if (!bech32_encode(rebuild, hrp, data, data_len)) {
+            if (!bech32_encode(rebuild, hrp, data, data_len, false)) {
                 printf("bech32_encode fails: '%s'\n", valid_checksum[i]);
                 ok = 0;
             }
@@ -270,7 +270,7 @@ int main(void) {
         char hrp[84];
         size_t data_len;
         int ok = 1;
-        if (bech32_decode(hrp, data, &data_len, invalid_checksum[i])) {
+        if (bech32_decode(hrp, data, &data_len, invalid_checksum[i], false)) {
             printf("bech32_decode succeeds on invalid string: '%s'\n", invalid_checksum[i]);
             ok = 0;
         }

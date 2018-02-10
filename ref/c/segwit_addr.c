@@ -75,7 +75,7 @@ static const int8_t charset_rev[128] = {
  *      data_len: Length of the data array.
  *  Returns true if successful.
  */
-static bool bech32_encode(char *output, const char *hrp, const uint8_t *data, size_t data_len) {
+static bool bech32_encode(char *output, const char *hrp, const uint8_t *data, size_t data_len, bool ln) {
     uint32_t chk = 1;
     size_t i = 0;
     while (hrp[i] != 0) {
@@ -88,7 +88,7 @@ static bool bech32_encode(char *output, const char *hrp, const uint8_t *data, si
         chk = bech32_polymod_step(chk) ^ (ch >> 5);
         ++i;
     }
-    //if (i + 7 + data_len > 90) return 0;
+    if (!ln && (i + 7 + data_len > 90)) return 0;
     chk = bech32_polymod_step(chk);
     while (*hrp != '\0') {
         chk = bech32_polymod_step(chk) ^ (*hrp & 0x1f);
@@ -390,7 +390,7 @@ bool segwit_addr_encode(char *output, uint8_t hrp_type, int witver, const uint8_
     data[0] = witver;
     if (!convert_bits(data + 1, &datalen, 5, witprog, witprog_len, 8, true)) return false;
     ++datalen;
-    return bech32_encode(output, hrp_str[hrp_type], data, datalen);
+    return bech32_encode(output, hrp_str[hrp_type], data, datalen, false);
 }
 
 bool segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint8_t hrp_type, const char* addr) {
@@ -493,7 +493,7 @@ bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data, co
     if (!convert_bits(data, &datalen, 5, sign, sizeof(sign), 8, true)) return false;
 
     *pp_invoice = (char *)malloc(2048);
-    return bech32_encode(*pp_invoice, hrp, data, datalen);
+    return bech32_encode(*pp_invoice, hrp, data, datalen, true);
 }
 
 
