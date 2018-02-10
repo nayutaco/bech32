@@ -81,15 +81,14 @@ static bool bech32_encode(char *output, const char *hrp, const uint8_t *data, si
     while (hrp[i] != 0) {
         int ch = hrp[i];
         if (ch < 33 || ch > 126) {
-            printf("fail %d\n", __LINE__);
             return 0;
         }
 
-        if (ch >= 'A' && ch <= 'Z') { printf("fail %d\n", __LINE__); return 0; }
+        if (ch >= 'A' && ch <= 'Z') return 0;
         chk = bech32_polymod_step(chk) ^ (ch >> 5);
         ++i;
     }
-    //if (i + 7 + data_len > 90) { printf("fail %d\n", __LINE__); return 0; }
+    //if (i + 7 + data_len > 90) return 0;
     chk = bech32_polymod_step(chk);
     while (*hrp != '\0') {
         chk = bech32_polymod_step(chk) ^ (*hrp & 0x1f);
@@ -97,7 +96,7 @@ static bool bech32_encode(char *output, const char *hrp, const uint8_t *data, si
     }
     *(output++) = '1';
     for (i = 0; i < data_len; ++i) {
-        if (*data >> 5) {printf("bech32_encode: %02x(%02x)\n", *data >> 5, *data); return false;}
+        if (*data >> 5) return false;
         chk = bech32_polymod_step(chk) ^ (*data);
         *(output++) = charset[*(data++)];
     }
@@ -128,14 +127,13 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
     size_t i;
     size_t input_len = strlen(input);
     size_t hrp_len;
-    int have_lower = 0, have_upper = 0;
+    bool have_lower = false, have_upper = false;
     if (ln) {
         if (input_len < (4 + 1 + 7 + 104 + 6)) {
             return false;
         }
     } else {
         if ((input_len < 8) || (90 < input_len)) {
-            printf("fail: %d\n", __LINE__);
             return false;
         }
     }
@@ -145,20 +143,18 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
     }
     hrp_len = input_len - (1 + *data_len);
     if (hrp_len < 1 || *data_len < 6) {
-        printf("fail: %d\n", __LINE__);
         return false;
     }
     *(data_len) -= 6;
     for (i = 0; i < hrp_len; ++i) {
         int ch = input[i];
         if (ch < 33 || ch > 126) {
-            printf("fail: %d\n", __LINE__);
             return false;
         }
         if (ch >= 'a' && ch <= 'z') {
-            have_lower = 1;
+            have_lower = true;
         } else if (ch >= 'A' && ch <= 'Z') {
-            have_upper = 1;
+            have_upper = true;
             ch = (ch - 'A') + 'a';
         }
         hrp[i] = ch;
@@ -172,10 +168,9 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
     ++i;
     while (i < input_len) {
         int v = (input[i] & 0x80) ? -1 : charset_rev[(int)input[i]];
-        if (input[i] >= 'a' && input[i] <= 'z') have_lower = 1;
-        if (input[i] >= 'A' && input[i] <= 'Z') have_upper = 1;
+        if (input[i] >= 'a' && input[i] <= 'z') have_lower = true;
+        if (input[i] >= 'A' && input[i] <= 'Z') have_upper = true;
         if (v == -1) {
-            printf("fail: %d\n", __LINE__);
             return false;
         }
         chk = bech32_polymod_step(chk) ^ v;
@@ -185,7 +180,6 @@ static bool bech32_decode(char* hrp, uint8_t *data, size_t *data_len, const char
         ++i;
     }
     if (have_lower && have_upper) {
-        printf("fail: %d\n", __LINE__);
         return false;
     }
     return chk == 1;
@@ -214,7 +208,6 @@ static bool convert_bits(uint8_t* out, size_t* outlen, int outbits, const uint8_
     if (pad) {
         if (bits) {
             out[(*outlen)++] = (val << (outbits - bits)) & maxv;
-            //printf("bits:%d\n", bits);
         }
     } else if (((val << (outbits - bits)) & maxv) || bits >= inbits) {
         return false;
@@ -297,32 +290,24 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_inv
         fprintf(stderr, "unknown tag: %02x\n", *p_tag);
         break;
     }
+    fprintf(stderr, "    ");
     int len = p_tag[1] * 0x20 + p_tag[2];
-    //fprintf(stderr, "  len=%d\n", len);
     p_tag += 3;
     uint8_t *p_data = (uint8_t *)malloc((len * 5 + 7) / 8); //確保サイズは切り上げ
     size_t d_len = 0;
     switch (tag) {
-    case 13:
-        //purpose of payment(ASCII)
-        if (!convert_bits(p_data, &d_len, 8, p_tag, len, 5, true)) return false;
-        d_len =  (len * 5) / 8;
-        for (size_t lp = 0; lp < d_len; lp++) {
-            fprintf(stderr, "%c", p_data[lp]);
-        }
-        break;
     case 6:
         //expiry second
         {
-            uint64_t expiry = convert_be64(p_tag, len);
-            fprintf(stderr, "invoice expiry=%" PRIu32 "\n", (uint32_t)expiry);
+            uint32_t expiry = (uint32_t)convert_be64(p_tag, len);
+            fprintf(stderr, "%" PRIu32 " seconds\n", expiry);
         }
         break;
     case 24:
         //min_final_cltv_expiry
         {
             p_invoice_data->min_final_cltv_expiry = convert_be64(p_tag, len);
-
+            fprintf(stderr, "%" PRIu32 " blocks\n", (uint32_t)p_invoice_data->min_final_cltv_expiry);
         }
         break;
     case 3:
@@ -331,6 +316,7 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_inv
         d_len =  (len * 5) / 8;
         if (d_len < 102) return false;
 
+        fprintf(stderr, "\n");
         {
             const uint8_t *p = p_data;
 
@@ -377,8 +363,14 @@ static bool analyze_tag(size_t *p_len, const uint8_t *p_tag, ln_invoice_t *p_inv
         if (tag == 1) {
             memcpy(p_invoice_data->payment_hash, p_data, LN_SZ_HASH);
         }
-        for (size_t lp = 0; lp < d_len; lp++) {
-            fprintf(stderr, "%02x", p_data[lp]);
+        if ((tag == 13)) {
+            for (size_t lp = 0; lp < d_len; lp++) {
+                fprintf(stderr, "%c", p_data[lp]);
+            }
+        } else {
+            for (size_t lp = 0; lp < d_len; lp++) {
+                fprintf(stderr, "%02x", p_data[lp]);
+            }
         }
     }
     fprintf(stderr, "\n\n");
@@ -581,7 +573,6 @@ bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
     if (!convert_bits(sig, &sig_len, 8, p_sig, 104, 5, false)) return false;
     ret = ucoin_tx_recover_pubkey(p_invoice_data->pubkey, sig[UCOIN_SZ_SIGN_RS], sig, hash);
     if (!ret) {
-        fprintf(stderr, "fail: recovery pubkey\n");
         return false;
     }
 
@@ -591,7 +582,6 @@ bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
     fprintf(stderr, "timestamp= %" PRIu64 " : %s", (uint64_t)tm, ctime(&tm));
 
     //tagged fields
-    fprintf(stderr, "data_len=%d\n", (int)data_len);
     ret = true;
     while (p_tag < p_sig) {
         size_t len;
