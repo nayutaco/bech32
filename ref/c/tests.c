@@ -211,32 +211,32 @@ int my_strncasecmp(const char *s1, const char *s2, size_t n) {
 }
 
 void print_invoice(const ln_invoice_t *p_invoice_data) {
-    printf("-----------------------------------------\n");
+    fprintf(stderr, "-----------------------------------------\n");
     switch (p_invoice_data->hrp_type) {
     case LN_INVOICE_MAINNET:
-        printf("for mainnet\n");
+        fprintf(stderr, "for mainnet\n");
         break;
     case LN_INVOICE_TESTNET:
-        printf("for testnet\n");
+        fprintf(stderr, "for testnet\n");
         break;
     default:
-        printf("unknown hrp_type\n");
+        fprintf(stderr, "unknown hrp_type\n");
     }
-    printf("amount_msat=%" PRIu64 "\n", p_invoice_data->amount_msat);
+    fprintf(stderr, "amount_msat=%" PRIu64 "\n", p_invoice_data->amount_msat);
     time_t tm = (time_t)p_invoice_data->timestamp;
-    printf("timestamp= %" PRIu64 " : %s", (uint64_t)p_invoice_data->timestamp, ctime(&tm));
-    printf("min_final_cltv_expiry=%d\n", p_invoice_data->min_final_cltv_expiry);
-    printf("pubkey=");
+    fprintf(stderr, "timestamp= %" PRIu64 " : %s", (uint64_t)p_invoice_data->timestamp, ctime(&tm));
+    fprintf(stderr, "min_final_cltv_expiry=%d\n", p_invoice_data->min_final_cltv_expiry);
+    fprintf(stderr, "pubkey=");
     for (int lp = 0; lp < UCOIN_SZ_PUBKEY; lp++) {
-        printf("%02x", p_invoice_data->pubkey[lp]);
+        fprintf(stderr, "%02x", p_invoice_data->pubkey[lp]);
     }
-    printf("\n");
-    printf("payment_hash=");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "payment_hash=");
     for (int lp = 0; lp < LN_SZ_HASH; lp++) {
-        printf("%02x", p_invoice_data->payment_hash[lp]);
+        fprintf(stderr, "%02x", p_invoice_data->payment_hash[lp]);
     }
-    printf("\n");
-    printf("-----------------------------------------\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "-----------------------------------------\n");
 }
 
 int main(void) {
@@ -357,9 +357,7 @@ int main(void) {
         char *p_invoice = NULL;
         if (ok) {
             ret = ln_invoice_encode(&p_invoice, &invoice_data, ln_valid_invoice[i].privkey);
-            if (ret) {
-                printf("encode invoice: %s\n", p_invoice);
-            } else {
+            if (!ret) {
                 printf("ln_invoice_encode fails\n");
                 ok = 0;
             }
