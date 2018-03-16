@@ -343,10 +343,14 @@ int main(void) {
         }
     }
 #endif
+    ln_node_t node;
+    ln_node_set(&node);
     for (i = 0; i < sizeof(ln_valid_invoice) / sizeof(ln_valid_invoice[0]); ++i) {
         printf("\n\n=[%d]=============================\n", (int)i);
         int ok = 1;
         ln_invoice_t invoice_data;
+        memcpy(node.keys.priv, ln_valid_invoice[i].privkey, UCOIN_SZ_PRIVKEY);
+        memcpy(node.keys.pub, ln_valid_invoice[i].pubkey, UCOIN_SZ_PUBKEY);
         bool ret = ln_invoice_decode(&invoice_data, ln_valid_invoice[i].invoice);
         if (ret && (memcmp(invoice_data.pubkey, ln_valid_invoice[i].pubkey, UCOIN_SZ_PUBKEY) == 0)) {
             print_invoice(&invoice_data);
@@ -356,7 +360,7 @@ int main(void) {
         }
         char *p_invoice = NULL;
         if (ok) {
-            ret = ln_invoice_encode(&p_invoice, &invoice_data, ln_valid_invoice[i].privkey);
+            ret = ln_invoice_encode(&p_invoice, &invoice_data);
             if (!ret) {
                 printf("ln_invoice_encode fails\n");
                 ok = 0;

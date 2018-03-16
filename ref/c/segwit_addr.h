@@ -90,12 +90,11 @@ typedef struct ln_invoice_t {
  *
  * @param[out]      pp_invoice
  * @param[in]       p_invoice_data
- * @param[in]       p_privkey
  * @return  true:success
  * @note
  *      - need `free(pp_invoice)' if don't use it.
  */
-bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data, const uint8_t *p_privkey);
+bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data);
 
 /** Decode a BOLT11 invoice
  *
