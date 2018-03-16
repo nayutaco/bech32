@@ -104,6 +104,15 @@ bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data);
  */
 bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice);
 
+/** BOLT11 形式invoice作成
+ *
+ * @param[out]      ppInvoice
+ * @param[in]       pPayHash
+ * @param[in]       Amount
+ * @retval      true        成功
+ */
+bool ln_invoice_create(char **ppInvoice, uint8_t Type, const uint8_t *pPayHash, uint64_t Amount);
+
 #ifdef __cplusplus
 }
 #endif //__cplusplus

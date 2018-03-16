@@ -590,3 +590,17 @@ bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
 
     return ret;
 }
+
+
+bool ln_invoice_create(char **ppInvoice, uint8_t Type, const uint8_t *pPayHash, uint64_t Amount)
+{
+    ln_invoice_t invoice_data;
+
+    invoice_data.hrp_type = Type;
+    invoice_data.amount_msat = Amount;
+    invoice_data.min_final_cltv_expiry = LN_MIN_FINAL_CLTV_EXPIRY;
+    memcpy(invoice_data.pubkey, ln_node_getid(), UCOIN_SZ_PUBKEY);
+    memcpy(invoice_data.payment_hash, pPayHash, LN_SZ_HASH);
+    bool ret = ln_invoice_encode(ppInvoice, &invoice_data);
+    return ret;
+}
