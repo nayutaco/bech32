@@ -411,7 +411,7 @@ bool segwit_addr_decode(int* witver, uint8_t* witdata, size_t* witdata_len, uint
 }
 
 
-bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data, const uint8_t *p_privkey) {
+bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data) {
     uint8_t data[1024];
     char hrp[128];
     size_t datalen = 0;
@@ -448,15 +448,11 @@ bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data, co
     time_t now = time(NULL);
     datalen = convert64_to8(data, now);
 
-    uint8_t pubkey[UCOIN_SZ_PUBKEY];
-    ucoin_keys_priv2pub(pubkey, p_privkey);
-    if (memcmp(pubkey, p_invoice_data->pubkey, UCOIN_SZ_PUBKEY) != 0) return false;
-
     //tagged field(payee pubkey)
     data[datalen++] = 0x13; // 33-byte public key of the payee node
     data[datalen++] = 1;  // 264bit --> 53(5bit)
     data[datalen++] = 21;
-    if (!convert_bits(data, &datalen, 5, pubkey, sizeof(pubkey), 8, true)) return false;
+    if (!convert_bits(data, &datalen, 5, p_invoice_data->pubkey, UCOIN_SZ_PUBKEY, 8, true)) return false;
 
     //tagged field(payment_hash)
     data[datalen++] = 0x01; // 256-bit SHA256 payment_hash
@@ -483,11 +479,11 @@ bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data, co
     mbedtls_sha256(hashdata, hashdatalen + hrp_len, hash, 0);
 
     uint8_t sign[UCOIN_SZ_SIGN_RS + 1];
-    bool ret = ucoin_tx_sign_rs(sign, hash, p_privkey);
+    bool ret = ln_signer_sign_nodekey(sign, hash);
     if (!ret) return false;
 
     int recid;
-    ret = ucoin_tx_recover_pubkey_id(&recid, pubkey, sign, hash);
+    ret = ucoin_tx_recover_pubkey_id(&recid, p_invoice_data->pubkey, sign, hash);
     if (!ret) return false;
     sign[UCOIN_SZ_SIGN_RS] = (uint8_t)recid;
     if (!convert_bits(data, &datalen, 5, sign, sizeof(sign), 8, true)) return false;
