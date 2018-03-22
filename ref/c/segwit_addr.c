@@ -47,13 +47,14 @@ static const char charset[] = {
     's', '3', 'j', 'n', '5', '4', 'k', 'h',
     'c', 'e', '6', 'm', 'u', 'a', '7', 'l'
 };
-static const char hrp_str[][5] = {
+static const char hrp_str[][7] = {
     { 'b', 'c', '\0' },
     { 't', 'b', '\0' },
     { 'B', 'C', '\0' },
     { 'T', 'B', '\0' },
     { 'l', 'n', 'b', 'c', '\0' },
     { 'l', 'n', 't', 'b', '\0' }
+    { 'l', 'n', 'b', 'c', 'r', 't', '\0' }
 };
 static const int8_t charset_rev[128] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -416,7 +417,7 @@ bool ln_invoice_encode(char** pp_invoice, const ln_invoice_t *p_invoice_data) {
     char hrp[128];
     size_t datalen = 0;
     *pp_invoice = NULL;
-    if ((p_invoice_data->hrp_type != LN_INVOICE_MAINNET) && (p_invoice_data->hrp_type != LN_INVOICE_TESTNET)) return false;
+    if ((p_invoice_data->hrp_type < LN_INVOICE_MAINNET) || (LN_INVOICE_REGTEST < p_invoice_data->hrp_type)) return false;
     strcpy(hrp, hrp_str[p_invoice_data->hrp_type]);
     if (p_invoice_data->amount_msat > 0) {
         //hrpにamount追加
@@ -499,10 +500,12 @@ bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice) {
     char hrp_actual[84];
     size_t data_len;
     if (!bech32_decode(hrp_actual, data, &data_len, invoice, true)) return false;
-    if (strncmp(hrp_str[LN_INVOICE_MAINNET], hrp_actual, 4) == 0) {
+    if (memcmp(hrp_str[LN_INVOICE_MAINNET], hrp_actual, 4) == 0) {
         p_invoice_data->hrp_type = LN_INVOICE_MAINNET;
-    } else if (strncmp(hrp_str[LN_INVOICE_TESTNET], hrp_actual, 4) == 0) {
+    } else if (memcmp(hrp_str[LN_INVOICE_TESTNET], hrp_actual, 4) == 0) {
         p_invoice_data->hrp_type = LN_INVOICE_TESTNET;
+    } else if (memcmp(hrp_str[LN_INVOICE_REGTEST], hrp_actual, 6) == 0) {
+        p_invoice_data->hrp_type = LN_INVOICE_REGTEST;
     } else {
         return false;
     }

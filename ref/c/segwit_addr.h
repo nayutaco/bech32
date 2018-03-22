@@ -32,6 +32,7 @@
 #define SEGWIT_ADDR_TESTNET2    ((uint8_t)3)
 #define LN_INVOICE_MAINNET      ((uint8_t)4)
 #define LN_INVOICE_TESTNET      ((uint8_t)5)
+#define LN_INVOICE_REGTEST      ((uint8_t)6)
 
 #ifdef __cplusplus
 extern "C" {
@@ -107,9 +108,12 @@ bool ln_invoice_decode(ln_invoice_t *p_invoice_data, const char* invoice);
 /** BOLT11 形式invoice作成
  *
  * @param[out]      ppInvoice
+ * @param[in]       Type            LN_INVOICE_xxx
  * @param[in]       pPayHash
  * @param[in]       Amount
  * @retval      true        成功
+ * @attention
+ *      - ppInoviceはmalloc()で確保するため、、使用後にfree()すること
  */
 bool ln_invoice_create(char **ppInvoice, uint8_t Type, const uint8_t *pPayHash, uint64_t Amount);
 
