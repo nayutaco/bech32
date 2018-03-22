@@ -53,7 +53,7 @@ static const char hrp_str[][7] = {
     { 'B', 'C', '\0' },
     { 'T', 'B', '\0' },
     { 'l', 'n', 'b', 'c', '\0' },
-    { 'l', 'n', 't', 'b', '\0' }
+    { 'l', 'n', 't', 'b', '\0' },
     { 'l', 'n', 'b', 'c', 'r', 't', '\0' }
 };
 static const int8_t charset_rev[128] = {
